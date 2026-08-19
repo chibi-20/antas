@@ -1,0 +1,55 @@
+/* Small overrides beyond Tailwind CDN defaults. Print-specific rules live here too. */
+
+/* Soft decorative blob in the top-right of each page's content header — purely visual. */
+.deco-blob {
+  position: absolute;
+  top: -3rem;
+  right: -3rem;
+  width: 16rem;
+  height: 16rem;
+  border-radius: 9999px;
+  background: radial-gradient(circle at 30% 30%, #c7d2fe, #ede9fe 60%, transparent 75%);
+  opacity: 0.5;
+  filter: blur(2px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.print-page {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 8mm;
+  width: 190mm;
+  height: 270mm;
+  margin: 0 auto 8mm auto;
+}
+
+.slip {
+  border: 1px dashed #94a3b8;
+  border-radius: 6px;
+  padding: 6mm;
+  font-size: 11px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.slip-empty { border-style: dashed; opacity: 0.3; }
+
+.slip-header { text-align: center; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; margin-bottom: 6px; }
+.slip-title { font-weight: 600; font-size: 13px; }
+.slip-sub { color: #64748b; font-size: 10px; }
+.slip-student { margin-bottom: 6px; line-height: 1.4; }
+.slip-table { width: 100%; border-collapse: collapse; flex: 1; }
+.slip-table th, .slip-table td { text-align: center; padding: 2px 4px; border-bottom: 1px solid #e2e8f0; }
+.slip-table th:first-child, .slip-table td:first-child { text-align: left; }
+.pending { color: #d97706; font-style: italic; }
+.slip-footer { border-top: 1px solid #cbd5e1; margin-top: 6px; padding-top: 4px; display: flex; justify-content: space-between; }
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: white !important; }
+  .print-page { page-break-after: always; margin: 0; width: auto; height: auto; }
+  @page { size: A4 portrait; margin: 10mm; }
+}
