@@ -18,6 +18,28 @@ function select_options(array $rows, string $valueKey, string $labelKey, $select
     return $html;
 }
 
+/**
+ * Honor classification off the general average alone, per the thresholds the user gave —
+ * no additional DepEd-style criteria (e.g. no grade below a floor in any subject, no failing
+ * marks in conduct) are applied here since none were specified.
+ */
+function honor_classification(?float $average): ?string
+{
+    if ($average === null) {
+        return null;
+    }
+    if ($average >= 98) {
+        return 'With Highest Honor';
+    }
+    if ($average >= 95) {
+        return 'With High Honor';
+    }
+    if ($average >= 90) {
+        return 'With Honor';
+    }
+    return null;
+}
+
 function require_active_school_year(): array
 {
     $year = active_school_year();

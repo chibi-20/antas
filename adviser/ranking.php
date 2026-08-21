@@ -30,21 +30,35 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
   <?php endfor; ?>
 </form>
 
-<div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden max-w-xl">
+<div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden max-w-2xl">
   <table class="w-full text-sm">
     <thead class="bg-slate-50 text-slate-500 text-xs uppercase">
-      <tr><th class="text-left px-4 py-3">Rank</th><th class="text-left px-4 py-3">Student</th><th class="text-left px-4 py-3">General Average</th></tr>
+      <tr><th class="text-left px-4 py-3">Rank</th><th class="text-left px-4 py-3">Student</th><th class="text-left px-4 py-3">General Average</th><th class="text-left px-4 py-3">Honor</th></tr>
     </thead>
     <tbody class="divide-y divide-slate-100">
-      <?php foreach ($ranking as $r): ?>
+      <?php
+        $honorClasses = [
+            'With Highest Honor' => 'bg-amber-100 text-amber-700',
+            'With High Honor' => 'bg-accent-100 text-accent-700',
+            'With Honor' => 'bg-emerald-100 text-emerald-700',
+        ];
+      ?>
+      <?php foreach ($ranking as $r): $honor = honor_classification($r['average'] !== null ? (float) $r['average'] : null); ?>
       <tr>
         <td class="px-4 py-3 font-semibold <?= (int) $r['rank_in_section'] <= 3 ? 'text-accent-700' : 'text-slate-600' ?>">#<?= (int) $r['rank_in_section'] ?></td>
         <td class="px-4 py-3 font-medium"><?= h($r['full_name']) ?></td>
         <td class="px-4 py-3"><?= h($r['average']) ?></td>
+        <td class="px-4 py-3">
+          <?php if ($honor): ?>
+            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium <?= $honorClasses[$honor] ?>"><?= icon_svg('star', 'w-3 h-3') ?> <?= h($honor) ?></span>
+          <?php else: ?>
+            <span class="text-slate-300">—</span>
+          <?php endif; ?>
+        </td>
       </tr>
       <?php endforeach; ?>
       <?php if (!$ranking): ?>
-      <tr><td colspan="3" class="px-4 py-6 text-center text-slate-400">No published subjects yet for this term — ranking will appear once at least one subject is published.</td></tr>
+      <tr><td colspan="4" class="px-4 py-6 text-center text-slate-400">No published subjects yet for this term — ranking will appear once at least one subject is published.</td></tr>
       <?php endif; ?>
     </tbody>
   </table>
