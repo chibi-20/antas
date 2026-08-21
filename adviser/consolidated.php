@@ -68,7 +68,7 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
         <td class="px-4 py-2 font-medium whitespace-nowrap sticky left-0 bg-white"><?= h($student['full_name']) ?></td>
         <?php foreach ($data['subjects'] as $subject): ?>
           <?php for ($t = 1; $t <= $term; $t++): $g = $data['gradesByTerm'][$t][$student['id']][$subject['subject_id']] ?? null; ?>
-            <td class="px-2 py-2 text-center border-l border-slate-100">
+            <td class="px-2 py-2 text-center border-l border-slate-100 <?= $g !== null ? grade_display_class((float) $g) : '' ?>">
               <?php if ($t === $term && $subject['status'] !== 'published'): ?>
                 <span class="text-xs text-amber-500">Pending</span>
               <?php else: ?>
@@ -76,11 +76,12 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
               <?php endif; ?>
             </td>
           <?php endfor; ?>
-          <?php if ($term === 3): ?>
-            <td class="px-2 py-2 text-center border-l border-slate-100 font-semibold text-accent-700"><?= h($data['finalGrades'][$student['id']][$subject['subject_id']] ?? '—') ?></td>
+          <?php if ($term === 3): $fg = $data['finalGrades'][$student['id']][$subject['subject_id']] ?? null; ?>
+            <td class="px-2 py-2 text-center border-l border-slate-100 font-semibold <?= $fg !== null ? (grade_display_class((float) $fg) ?: 'text-accent-700') : 'text-accent-700' ?>"><?= $fg !== null ? h($fg) : '—' ?></td>
           <?php endif; ?>
         <?php endforeach; ?>
-        <td class="px-3 py-2 text-center font-semibold text-accent-700"><?= h($data['averages'][$student['id']]['average'] ?? '—') ?></td>
+        <?php $avg = $data['averages'][$student['id']]['average'] ?? null; ?>
+        <td class="px-3 py-2 text-center font-semibold <?= $avg !== null ? (grade_display_class((float) $avg) ?: 'text-accent-700') : 'text-accent-700' ?>"><?= $avg !== null ? h($avg) : '—' ?></td>
         <td class="px-3 py-2 text-center"><?= h($data['averages'][$student['id']]['rank_in_section'] ?? '—') ?></td>
       </tr>
       <?php endforeach; ?>

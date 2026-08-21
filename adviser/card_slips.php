@@ -56,7 +56,7 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
         <tr>
           <td><?= h($subject['subject_name']) ?></td>
           <?php for ($t = 1; $t <= $term; $t++): $g = $data['gradesByTerm'][$t][$student['id']][$subject['subject_id']] ?? null; ?>
-          <td>
+          <td class="<?= $g !== null ? grade_display_class((float) $g) : '' ?>">
             <?php if ($t === $term && $subject['status'] !== 'published'): ?>
               <span class="pending">Pending</span>
             <?php else: ?>
@@ -64,15 +64,16 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
             <?php endif; ?>
           </td>
           <?php endfor; ?>
-          <?php if ($term === 3): ?>
-          <td><strong><?= h($data['finalGrades'][$student['id']][$subject['subject_id']] ?? '—') ?></strong></td>
+          <?php if ($term === 3): $fg = $data['finalGrades'][$student['id']][$subject['subject_id']] ?? null; ?>
+          <td class="<?= $fg !== null ? grade_display_class((float) $fg) : '' ?>"><strong><?= $fg !== null ? h($fg) : '—' ?></strong></td>
           <?php endif; ?>
         </tr>
         <?php endforeach; ?>
       </tbody>
     </table>
+    <?php $avg = $data['averages'][$student['id']]['average'] ?? null; ?>
     <div class="slip-footer">
-      <div>General Average: <strong><?= h($data['averages'][$student['id']]['average'] ?? '—') ?></strong></div>
+      <div>General Average: <strong class="<?= $avg !== null ? grade_display_class((float) $avg) : '' ?>"><?= $avg !== null ? h($avg) : '—' ?></strong></div>
       <div>Rank in Section: <strong><?= h($data['averages'][$student['id']]['rank_in_section'] ?? '—') ?></strong></div>
     </div>
   </div>

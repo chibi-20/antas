@@ -47,7 +47,7 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
       <tr>
         <td class="px-4 py-3 font-semibold <?= (int) $r['rank_in_section'] <= 3 ? 'text-accent-700' : 'text-slate-600' ?>">#<?= (int) $r['rank_in_section'] ?></td>
         <td class="px-4 py-3 font-medium"><?= h($r['full_name']) ?></td>
-        <td class="px-4 py-3"><?= h($r['average']) ?></td>
+        <td class="px-4 py-3 <?= $r['average'] !== null ? grade_display_class((float) $r['average']) : '' ?>"><?= h($r['average']) ?></td>
         <td class="px-4 py-3">
           <?php if ($honor): ?>
             <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium <?= $honorClasses[$honor] ?>"><?= icon_svg('star', 'w-3 h-3') ?> <?= h($honor) ?></span>

@@ -181,16 +181,19 @@ function initGradePreview(config) {
   }
 
   function recalcStudent(studentId) {
-    var totals = { WW: { raw: 0, highest: 0, count: 0, filled: 0 }, PT: { raw: 0, highest: 0, count: 0, filled: 0 }, EX: { raw: 0, highest: 0, count: 0, filled: 0 } };
+    // Mirrors gradeCalc.php's recompute_term_grade(): a component contributes a running
+    // percentage from whichever of its items are filled so far, not just once every item is
+    // — so a grade (and any failing grade with it) shows up early instead of hiding behind a
+    // blank until the whole term is entered.
+    var totals = { WW: { raw: 0, highest: 0, filled: 0 }, PT: { raw: 0, highest: 0, filled: 0 }, EX: { raw: 0, highest: 0, filled: 0 } };
 
     items.forEach(function (item) {
       var input = scoreInput(item.id, studentId);
       if (!input) return;
       var c = totals[item.type];
-      c.count++;
-      c.highest += item.highest;
       if (input.value !== '' && !isNaN(parseFloat(input.value))) {
         c.raw += parseFloat(input.value);
+        c.highest += item.highest;
         c.filled++;
       }
     });
@@ -198,7 +201,7 @@ function initGradePreview(config) {
     var pct = {};
     ['WW', 'PT', 'EX'].forEach(function (type) {
       var c = totals[type];
-      pct[type] = (c.count > 0 && c.filled === c.count && c.highest > 0) ? (c.raw / c.highest * 100) : null;
+      pct[type] = (c.filled > 0 && c.highest > 0) ? (c.raw / c.highest * 100) : null;
     });
 
     var initial = null;
@@ -210,7 +213,14 @@ function initGradePreview(config) {
     var initEl = document.querySelector('[data-preview-initial="' + studentId + '"]');
     var transEl = document.querySelector('[data-preview-transmuted="' + studentId + '"]');
     if (initEl) initEl.textContent = initial !== null ? initial.toFixed(2) : '—';
-    if (transEl) transEl.textContent = transmuted !== null ? transmuted.toFixed(2) : '—';
+    if (transEl) {
+      transEl.textContent = transmuted !== null ? transmuted.toFixed(2) : '—';
+      // Mirrors includes/helpers.php's grade_display_class() — flag a failing grade (below
+      // 75, the DepEd passing mark) the moment it appears, not just after saving.
+      var failing = transmuted !== null && transmuted < 75;
+      transEl.classList.toggle('text-rose-600', failing);
+      transEl.classList.toggle('text-accent-700', !failing);
+    }
   }
 
   students.forEach(function (studentId) {

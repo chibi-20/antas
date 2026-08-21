@@ -63,20 +63,26 @@ function recompute_term_grade(int $studentId, int $subjectId, int $term, int $sc
         return;
     }
 
+    // A component (WW/PT/EX) contributes a running percentage as soon as ANY of its items
+    // has a score — computed only from the items actually entered so far, not penalized for
+    // ones still blank. This is deliberate: requiring every single item before showing
+    // anything meant one forgotten/absent score could hide a student's entire grade (and any
+    // failing grade with it) behind a blank "—" all the way through to the printed card
+    // slip. The number here is a running grade that updates as more scores come in, same as
+    // a normal gradebook — not a claim that the term is complete.
     $componentPct = [];
     $itemStmt = $pdo->prepare('SELECT
-            COALESCE(SUM(ss.raw_score), 0) AS raw_total,
-            COALESCE(SUM(ai.highest_possible_score), 0) AS highest_total,
-            COUNT(ai.id) AS item_count,
-            SUM(CASE WHEN ss.raw_score IS NULL THEN 1 ELSE 0 END) AS missing_count
+            COALESCE(SUM(CASE WHEN ss.raw_score IS NOT NULL THEN ss.raw_score ELSE 0 END), 0) AS raw_total,
+            COALESCE(SUM(CASE WHEN ss.raw_score IS NOT NULL THEN ai.highest_possible_score ELSE 0 END), 0) AS highest_total,
+            SUM(CASE WHEN ss.raw_score IS NOT NULL THEN 1 ELSE 0 END) AS entered_count
         FROM assessment_items ai
         LEFT JOIN student_scores ss ON ss.assessment_item_id = ai.id AND ss.student_id = ?
         WHERE ai.section_subject_teacher_id = ? AND ai.term = ? AND ai.component_type = ?');
     foreach (['WW', 'PT', 'EX'] as $type) {
         $itemStmt->execute([$studentId, $sstId, $term, $type]);
         $row = $itemStmt->fetch();
-        $hasIncompleteData = (int) $row['item_count'] === 0 || (int) $row['missing_count'] > 0;
-        $componentPct[$type] = $hasIncompleteData ? null : compute_percentage((float) $row['raw_total'], (float) $row['highest_total']);
+        $hasNoData = (int) $row['entered_count'] === 0;
+        $componentPct[$type] = $hasNoData ? null : compute_percentage((float) $row['raw_total'], (float) $row['highest_total']);
     }
 
     $initial = compute_initial_grade($componentPct['WW'], $componentPct['PT'], $componentPct['EX'], $weights);

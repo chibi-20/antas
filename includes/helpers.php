@@ -40,6 +40,17 @@ function honor_classification(?float $average): ?string
     return null;
 }
 
+/**
+ * CSS classes to make a failing grade (below 75, the DepEd passing mark) visually impossible
+ * to miss wherever a transmuted grade / final grade / general average is displayed — class
+ * record, Head Teacher review, consolidated grades, card slips, ranking. A grade that hasn't
+ * been computed yet (null) gets no special styling.
+ */
+function grade_display_class(?float $grade): string
+{
+    return $grade !== null && $grade < 75 ? 'text-rose-600 font-semibold' : '';
+}
+
 function require_active_school_year(): array
 {
     $year = active_school_year();

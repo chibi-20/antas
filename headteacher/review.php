@@ -182,12 +182,12 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
           <?php endforeach; ?>
         <?php endforeach; ?>
         <?php for ($t = 1; $t < $term; $t++): $pg = $priorGrades[$t][$student['id']] ?? null; ?>
-          <td class="px-3 py-2 text-center text-slate-500"><?= $pg !== null ? h($pg) : '<span class="text-slate-300">—</span>' ?></td>
+          <td class="px-3 py-2 text-center <?= $pg !== null ? grade_display_class((float) $pg) : 'text-slate-500' ?>"><?= $pg !== null ? h($pg) : '<span class="text-slate-300">—</span>' ?></td>
         <?php endfor; ?>
         <td class="px-3 py-2 text-center font-medium"><?= $grade && $grade['initial_grade'] !== null ? h($grade['initial_grade']) : '<span class="text-slate-300">—</span>' ?></td>
-        <td class="px-3 py-2 text-center font-semibold text-accent-700"><?= $grade && $grade['transmuted_grade'] !== null ? h($grade['transmuted_grade']) : '<span class="text-slate-300">—</span>' ?></td>
-        <?php if ($term === 3): ?>
-          <td class="px-3 py-2 text-center font-semibold text-accent-700"><?= h($finalGrades[$student['id']] ?? '—') ?></td>
+        <td class="px-3 py-2 text-center font-semibold <?= $grade && $grade['transmuted_grade'] !== null ? (grade_display_class((float) $grade['transmuted_grade']) ?: 'text-accent-700') : 'text-accent-700' ?>"><?= $grade && $grade['transmuted_grade'] !== null ? h($grade['transmuted_grade']) : '<span class="text-slate-300">—</span>' ?></td>
+        <?php if ($term === 3): $fg = $finalGrades[$student['id']] ?? null; ?>
+          <td class="px-3 py-2 text-center font-semibold <?= $fg !== null ? (grade_display_class((float) $fg) ?: 'text-accent-700') : 'text-accent-700' ?>"><?= $fg !== null ? h($fg) : '—' ?></td>
         <?php endif; ?>
       </tr>
       <?php endforeach; ?>
