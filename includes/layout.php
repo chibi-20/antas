@@ -120,18 +120,20 @@ function nav_items(array $user): array
     $advStmt->execute([$user['id']]);
     $advisedSections = $advStmt->fetchAll(PDO::FETCH_COLUMN);
     if ($advisedSections) {
-        // These three pages need a section_id — link straight to it when there's exactly one
-        // section to disambiguate; with more than one, send them to the section picker instead
-        // of guessing, since a plain link to e.g. consolidated.php with no section_id 403s.
+        // These pages need a section_id — link straight to it when there's exactly one section
+        // to disambiguate; with more than one, send them to the section picker instead of
+        // guessing, since a plain link to e.g. consolidated.php with no section_id 403s.
         $items['My Section'] = 'adviser/index.php';
         if (count($advisedSections) === 1) {
             $sid = $advisedSections[0];
             $items['Consolidated Grades'] = 'adviser/consolidated.php?section_id=' . $sid;
             $items['Ranking'] = 'adviser/ranking.php?section_id=' . $sid;
+            $items['At Risk'] = 'adviser/at_risk.php?section_id=' . $sid;
             $items['Card Slips'] = 'adviser/card_slips.php?section_id=' . $sid;
         } else {
             $items['Consolidated Grades'] = 'adviser/index.php';
             $items['Ranking'] = 'adviser/index.php';
+            $items['At Risk'] = 'adviser/index.php';
             $items['Card Slips'] = 'adviser/index.php';
         }
     }
