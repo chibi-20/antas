@@ -36,13 +36,6 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
       <tr><th class="text-left px-4 py-3">Rank</th><th class="text-left px-4 py-3">Student</th><th class="text-left px-4 py-3">General Average</th><th class="text-left px-4 py-3">Honor</th></tr>
     </thead>
     <tbody class="divide-y divide-slate-100">
-      <?php
-        $honorClasses = [
-            'With Highest Honor' => 'bg-amber-100 text-amber-700',
-            'With High Honor' => 'bg-accent-100 text-accent-700',
-            'With Honor' => 'bg-emerald-100 text-emerald-700',
-        ];
-      ?>
       <?php foreach ($ranking as $r): $honor = honor_classification($r['average'] !== null ? (float) $r['average'] : null); ?>
       <tr>
         <td class="px-4 py-3 font-semibold <?= (int) $r['rank_in_section'] <= 3 ? 'text-accent-700' : 'text-slate-600' ?>">#<?= (int) $r['rank_in_section'] ?></td>
@@ -50,7 +43,7 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
         <td class="px-4 py-3 <?= $r['average'] !== null ? grade_display_class((float) $r['average']) : '' ?>"><?= h($r['average']) ?></td>
         <td class="px-4 py-3">
           <?php if ($honor): ?>
-            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium <?= $honorClasses[$honor] ?>"><?= icon_svg('star', 'w-3 h-3') ?> <?= h($honor) ?></span>
+            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700"><?= icon_svg('star', 'w-3 h-3') ?> <?= h($honor) ?></span>
           <?php else: ?>
             <span class="text-slate-300">—</span>
           <?php endif; ?>

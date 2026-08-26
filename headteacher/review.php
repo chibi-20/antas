@@ -35,23 +35,92 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify();
     $action = $_POST['action'] ?? '';
 
-    if (!$submission || $submission['status'] !== 'submitted_for_review') {
-        flash_set('error', 'This term is not currently awaiting review.');
-    } elseif ($action === 'publish') {
-        $pdo->prepare("UPDATE submission_status SET status = 'published', reviewed_by = ?, reviewed_at = NOW() WHERE section_subject_teacher_id = ? AND term = ?")
-            ->execute([$user['id'], $sstId, $term]);
-        flash_set('success', 'Grades published.');
-    } elseif ($action === 'return') {
-        $comment = trim((string) ($_POST['revision_comment'] ?? ''));
-        if ($comment === '') {
-            flash_set('error', 'A comment is required when returning for revision.');
+    if ($action === 'publish' || $action === 'return') {
+        if (!$submission || $submission['status'] !== 'submitted_for_review') {
+            flash_set('error', 'This term is not currently awaiting review.');
+        } elseif ($action === 'publish') {
+            $pdo->prepare("UPDATE submission_status SET status = 'published', reviewed_by = ?, reviewed_at = NOW() WHERE section_subject_teacher_id = ? AND term = ?")
+                ->execute([$user['id'], $sstId, $term]);
+
+            // If this publish is closing out an approved edit-request cycle, finalize its
+            // history diff now: fill in each snapshotted student's new grade and mark the
+            // request done, so it's a single clean before/after, not one row per save.
+            $activeEdit = $pdo->prepare("SELECT id FROM grade_edit_requests
+                WHERE section_subject_teacher_id = ? AND term = ? AND status = 'approved' AND finalized_at IS NULL
+                ORDER BY reviewed_at DESC LIMIT 1");
+            $activeEdit->execute([$sstId, $term]);
+            if ($editRequestId = $activeEdit->fetchColumn()) {
+                $newGradeStmt = $pdo->prepare('SELECT transmuted_grade FROM term_grades WHERE student_id = ? AND subject_id = ? AND term = ?');
+                $historyRowsStmt = $pdo->prepare('SELECT id, student_id FROM grade_edit_history WHERE edit_request_id = ?');
+                $historyRowsStmt->execute([$editRequestId]);
+                $updateHistory = $pdo->prepare('UPDATE grade_edit_history SET new_transmuted_grade = ? WHERE id = ?');
+                foreach ($historyRowsStmt->fetchAll() as $h) {
+                    $newGradeStmt->execute([$h['student_id'], $assignment['subject_id'], $term]);
+                    $new = $newGradeStmt->fetchColumn();
+                    $updateHistory->execute([$new !== false ? $new : null, $h['id']]);
+                }
+                $pdo->prepare('UPDATE grade_edit_requests SET finalized_at = NOW() WHERE id = ?')->execute([$editRequestId]);
+            }
+
+            flash_set('success', 'Grades published.');
         } else {
+            $comment = trim((string) ($_POST['revision_comment'] ?? ''));
+            if ($comment === '') {
+                flash_set('error', 'A comment is required when returning for revision.');
+            } else {
+                $pdo->prepare("UPDATE submission_status SET status = 'returned_for_revision', reviewed_by = ?, reviewed_at = NOW(), revision_comment = ? WHERE section_subject_teacher_id = ? AND term = ?")
+                    ->execute([$user['id'], $comment, $sstId, $term]);
+                flash_set('success', 'Returned to teacher for revision.');
+            }
+        }
+    } elseif ($action === 'approve_edit' || $action === 'reject_edit') {
+        $editRequestId = (int) ($_POST['edit_request_id'] ?? 0);
+        $erStmt = $pdo->prepare("SELECT * FROM grade_edit_requests WHERE id = ? AND section_subject_teacher_id = ? AND term = ? AND status = 'pending'");
+        $erStmt->execute([$editRequestId, $sstId, $term]);
+        $er = $erStmt->fetch();
+
+        if (!$er || !$submission || $submission['status'] !== 'published') {
+            flash_set('error', 'No pending edit request found for this term.');
+        } elseif ($action === 'approve_edit') {
+            $pdo->prepare("UPDATE grade_edit_requests SET status = 'approved', reviewed_by = ?, reviewed_at = NOW() WHERE id = ?")
+                ->execute([$user['id'], $editRequestId]);
+            // Reopens editing via the existing lock mechanism — class_record.php already
+            // treats 'returned_for_revision' as editable, no changes needed there.
             $pdo->prepare("UPDATE submission_status SET status = 'returned_for_revision', reviewed_by = ?, reviewed_at = NOW(), revision_comment = ? WHERE section_subject_teacher_id = ? AND term = ?")
-                ->execute([$user['id'], $comment, $sstId, $term]);
-            flash_set('success', 'Returned to teacher for revision.');
+                ->execute([$user['id'], 'Edit request approved — ' . $er['reason'], $sstId, $term]);
+            // Snapshot every active student's CURRENT grade as the "old" value for this
+            // request's history — the "new" value gets filled in once republished, above.
+            $studentsStmt = $pdo->prepare('SELECT id FROM students WHERE section_id = ? AND is_active = 1');
+            $studentsStmt->execute([$assignment['section_id']]);
+            $oldGradeStmt = $pdo->prepare('SELECT transmuted_grade FROM term_grades WHERE student_id = ? AND subject_id = ? AND term = ?');
+            $insertHistory = $pdo->prepare('INSERT INTO grade_edit_history (edit_request_id, student_id, old_transmuted_grade) VALUES (?, ?, ?)');
+            foreach ($studentsStmt->fetchAll(PDO::FETCH_COLUMN) as $studentId) {
+                $oldGradeStmt->execute([$studentId, $assignment['subject_id'], $term]);
+                $old = $oldGradeStmt->fetchColumn();
+                $insertHistory->execute([$editRequestId, $studentId, $old !== false ? $old : null]);
+            }
+            flash_set('success', 'Edit request approved — term reopened for the teacher.');
+        } else {
+            $comment = trim((string) ($_POST['review_comment'] ?? ''));
+            if ($comment === '') {
+                flash_set('error', 'A comment is required when rejecting an edit request.');
+            } else {
+                $pdo->prepare("UPDATE grade_edit_requests SET status = 'rejected', reviewed_by = ?, reviewed_at = NOW(), review_comment = ? WHERE id = ?")
+                    ->execute([$user['id'], $comment, $editRequestId]);
+                flash_set('success', 'Edit request rejected.');
+            }
         }
     }
     redirect("/headteacher/review.php?sst_id=$sstId&term=$term");
+}
+
+// Pending edit request for this assignment/term, if any — drives the approve/reject card
+// shown below when this term is published.
+$pendingEditRequest = null;
+if ($submission && $submission['status'] === 'published') {
+    $perStmt = $pdo->prepare("SELECT * FROM grade_edit_requests WHERE section_subject_teacher_id = ? AND term = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 1");
+    $perStmt->execute([$sstId, $term]);
+    $pendingEditRequest = $perStmt->fetch() ?: null;
 }
 
 $items = $pdo->prepare('SELECT * FROM assessment_items WHERE section_subject_teacher_id = ? AND term = ? ORDER BY component_type, sort_order, id');
@@ -174,7 +243,7 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
           $gradeStmt->execute([$student['id'], $assignment['subject_id'], $term]);
           $grade = $gradeStmt->fetch();
       ?>
-      <tr>
+      <tr id="student-<?= (int) $student['id'] ?>">
         <td class="px-4 py-2 font-medium whitespace-nowrap sticky left-0 bg-white"><?= h($student['full_name']) ?></td>
         <?php foreach (['WW', 'PT', 'EX'] as $type): ?>
           <?php foreach ($itemsByType[$type] as $item): ?>
@@ -217,13 +286,39 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
   </form>
 </div>
 <?php elseif ($submission && $submission['status'] === 'published'): ?>
-<p class="text-sm text-emerald-700">Published on <?= h($submission['reviewed_at']) ?>.</p>
+<p class="text-sm text-emerald-700 mb-4">Published on <?= h($submission['reviewed_at']) ?>.</p>
+<?php if ($pendingEditRequest): ?>
+<div class="bg-amber-50 border border-amber-200 rounded-xl p-5 max-w-lg">
+  <h2 class="text-sm font-semibold text-amber-800 mb-1">Edit request from <?= h($assignment['teacher_name']) ?></h2>
+  <p class="text-sm text-amber-700 mb-4">Reason: <?= h($pendingEditRequest['reason']) ?></p>
+  <div class="flex gap-3 items-start">
+    <form method="post" data-confirm="Approve this edit request? The term will reopen for editing.">
+      <?= csrf_field() ?>
+      <input type="hidden" name="action" value="approve_edit">
+      <input type="hidden" name="edit_request_id" value="<?= (int) $pendingEditRequest['id'] ?>">
+      <input type="hidden" name="sst_id" value="<?= $sstId ?>">
+      <input type="hidden" name="term" value="<?= $term ?>">
+      <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 py-2 rounded-lg text-sm">Approve</button>
+    </form>
+    <form method="post" class="flex-1">
+      <?= csrf_field() ?>
+      <input type="hidden" name="action" value="reject_edit">
+      <input type="hidden" name="edit_request_id" value="<?= (int) $pendingEditRequest['id'] ?>">
+      <input type="hidden" name="sst_id" value="<?= $sstId ?>">
+      <input type="hidden" name="term" value="<?= $term ?>">
+      <textarea name="review_comment" required placeholder="Explain why this is being rejected…" class="w-full mb-2 px-3 py-2 border border-slate-300 rounded-lg text-sm" rows="2"></textarea>
+      <button type="submit" class="bg-rose-600 hover:bg-rose-700 text-white font-medium px-4 py-2 rounded-lg text-sm">Reject</button>
+    </form>
+  </div>
+</div>
+<?php endif; ?>
 <?php else: ?>
 <p class="text-sm text-slate-400">This term has not been submitted for review yet.</p>
 <?php endif; ?>
 <script>
 window.addEventListener('DOMContentLoaded', function () {
   initTopScrollbar('grid-scroll-top', 'grid-scroll-bottom', 'grid-scroll-spacer');
+  initHashHighlight();
 });
 </script>
 <?php render_footer(); ?>

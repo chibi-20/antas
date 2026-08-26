@@ -12,6 +12,10 @@ if ($term < 1 || $term > 3) {
 
 $section = require_own_section($sectionId);
 $data = get_consolidated_data($sectionId, (int) $section['school_year_id'], $term);
+// MAPEH's individual components (Music-Arts, PE-Health) are display-only on Consolidated
+// Grades/Card Slips — kept out of this export so PLS's expected column format (one merged
+// MAPEH column) doesn't change.
+$data['subjects'] = array_values(array_filter($data['subjects'], fn($s) => !$s['is_child']));
 
 // Column order/headers are a reasonable default, unverified against PLS's actual import
 // screen (pls.jzgmnhsportal.com is login-gated) — see README "CSV export column order".

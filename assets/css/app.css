@@ -45,7 +45,11 @@
 .slip-table th, .slip-table td { text-align: center; padding: 2px 4px; border-bottom: 1px solid #e2e8f0; }
 .slip-table th:first-child, .slip-table td:first-child { text-align: left; }
 .pending { color: #d97706; font-style: italic; }
+/* DepEd Order No. 15 s. 2026 qualitative descriptor letter (A-E, see GRADE_DESCRIPTOR_LEGEND
+   in includes/helpers.php), shown inline next to a grade on the card slip. */
+.descriptor { font-size: 9px; color: #94a3b8; font-weight: normal; margin-left: 2px; }
 .slip-footer { border-top: 1px solid #cbd5e1; margin-top: 6px; padding-top: 4px; display: flex; justify-content: space-between; }
+.slip-legend { font-size: 7px; color: #94a3b8; text-align: center; margin-top: 3px; }
 
 @media print {
   .no-print { display: none !important; }

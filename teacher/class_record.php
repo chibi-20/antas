@@ -19,6 +19,18 @@ $statusStmt->execute([$sstId, $term]);
 $submission = $statusStmt->fetch();
 $editable = !$submission || !in_array($submission['status'], ['submitted_for_review', 'published'], true);
 
+// Most recent edit request for this assignment/term, if the term is published — drives the
+// "Request Edit" UI below (a pending one blocks a new request; a rejected one shows why and
+// lets the teacher try again with a new reason).
+$editRequest = null;
+if ($submission && $submission['status'] === 'published') {
+    $erStmt = $pdo->prepare('SELECT ger.*, u.full_name AS reviewed_by_name FROM grade_edit_requests ger
+        LEFT JOIN users u ON u.id = ger.reviewed_by
+        WHERE ger.section_subject_teacher_id = ? AND ger.term = ? ORDER BY ger.created_at DESC LIMIT 1');
+    $erStmt->execute([$sstId, $term]);
+    $editRequest = $erStmt->fetch() ?: null;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_verify();
     if (!$editable) {
@@ -218,6 +230,33 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
 <div class="mb-6 px-4 py-3 rounded-lg text-sm bg-slate-100 text-slate-600 border border-slate-200">
   This term is <?= h(STATUS_LABELS[$submission['status']] ?? $submission['status']) ?> and can no longer be edited.
 </div>
+<?php endif; ?>
+
+<?php if ($submission && $submission['status'] === 'published'): ?>
+  <?php if ($editRequest && $editRequest['status'] === 'pending'): ?>
+  <div class="mb-6 px-4 py-3 rounded-lg text-sm bg-amber-50 text-amber-700 border border-amber-200">
+    <strong>Edit request pending Head Teacher approval.</strong>
+    <div class="mt-1 text-amber-600">Reason: <?= h($editRequest['reason']) ?></div>
+  </div>
+  <?php else: ?>
+    <?php if ($editRequest && $editRequest['status'] === 'rejected'): ?>
+    <div class="mb-4 px-4 py-3 rounded-lg text-sm bg-rose-50 text-rose-700 border border-rose-200">
+      <strong>Edit request rejected<?= $editRequest['reviewed_by_name'] ? ' by ' . h($editRequest['reviewed_by_name']) : '' ?>.</strong>
+      <?php if ($editRequest['review_comment']): ?><div class="mt-1">Reason: <?= h($editRequest['review_comment']) ?></div><?php endif; ?>
+    </div>
+    <?php endif; ?>
+    <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6 mb-6 max-w-lg">
+      <h2 class="text-sm font-semibold text-slate-600 mb-1">Spot an error?</h2>
+      <p class="text-xs text-slate-400 mb-3">Published grades are locked. Request an edit and explain why — the Head Teacher who supervises this subject must approve before you can make changes.</p>
+      <form method="post" action="<?= h(url('/teacher/request_edit.php')) ?>">
+        <?= csrf_field() ?>
+        <input type="hidden" name="sst_id" value="<?= $sstId ?>">
+        <input type="hidden" name="term" value="<?= $term ?>">
+        <textarea name="reason" required placeholder="Explain what needs to be corrected and why…" class="w-full mb-3 px-3 py-2 border border-slate-300 rounded-lg text-sm" rows="2"></textarea>
+        <button type="submit" class="bg-accent-600 hover:bg-accent-700 text-white font-medium px-4 py-2 rounded-lg text-sm">Request Edit</button>
+      </form>
+    </div>
+  <?php endif; ?>
 <?php endif; ?>
 
 <?php if ($editable): ?>

@@ -10,6 +10,24 @@ document.querySelectorAll('[data-confirm]').forEach(function (el) {
 });
 
 /**
+ * When a page is loaded with a #student-N hash (e.g. a grade cell on headteacher/
+ * grade_summary.php linking into headteacher/review.php's full score breakdown), scrolls
+ * that student's row into view and briefly highlights it. Harmless no-op on any page without
+ * a matching element or hash, safe to call unconditionally.
+ */
+function initHashHighlight() {
+  var hash = window.location.hash;
+  if (!hash) return;
+  var target = document.querySelector(hash);
+  if (!target) return;
+  target.scrollIntoView({ block: 'center' });
+  target.classList.add('bg-amber-100');
+  setTimeout(function () {
+    target.classList.remove('bg-amber-100');
+  }, 2000);
+}
+
+/**
  * Mirrors a wide table's horizontal scrollbar at the top of the container too, so it's
  * reachable without scrolling all the way down past every row first (class_record.php /
  * headteacher/review.php). The top bar is an empty spacer sized to match the real table's

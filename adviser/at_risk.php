@@ -19,6 +19,11 @@ $data = get_consolidated_data($sectionId, (int) $section['school_year_id'], $ter
 $atRisk = [];
 foreach ($data['students'] as $student) {
     foreach ($data['subjects'] as $subject) {
+        // MAPEH's components (Music-Arts, PE-Health) never count toward the average and must
+        // never surface here on their own — only the merged MAPEH grade can flag a student.
+        if ($subject['is_child']) {
+            continue;
+        }
         $g = $data['gradesByTerm'][$term][$student['id']][$subject['subject_id']] ?? null;
         if ($g === null || (float) $g >= 75) {
             continue;
