@@ -14,6 +14,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $code = trim((string) ($_POST['subject_code'] ?? ''));
     $weightProfileId = (int) ($_POST['weight_profile_id'] ?? 0);
     $parentSubjectId = (int) ($_POST['parent_subject_id'] ?? 0) ?: null;
+    $sortOrder = ($_POST['sort_order'] ?? '') !== '' ? (int) $_POST['sort_order'] : 100;
     $err = ($name === '' || $code === '' || $weightProfileId === 0) ? 'All fields are required.' : null;
 
     if ($action === 'create') {
@@ -21,8 +22,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash_set('error', $err);
         } else {
             try {
-                $pdo->prepare('INSERT INTO subjects (subject_name, subject_code, weight_profile_id, parent_subject_id) VALUES (?, ?, ?, ?)')
-                    ->execute([$name, $code, $weightProfileId, $parentSubjectId]);
+                $pdo->prepare('INSERT INTO subjects (subject_name, subject_code, weight_profile_id, parent_subject_id, sort_order) VALUES (?, ?, ?, ?, ?)')
+                    ->execute([$name, $code, $weightProfileId, $parentSubjectId, $sortOrder]);
                 flash_set('success', "Subject \"$name\" created.");
             } catch (PDOException $e) {
                 flash_set('error', 'Could not create subject — subject code may already be in use.');
@@ -37,8 +38,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash_set('error', $err);
         } else {
             try {
-                $pdo->prepare('UPDATE subjects SET subject_name=?, subject_code=?, weight_profile_id=?, parent_subject_id=? WHERE id=?')
-                    ->execute([$name, $code, $weightProfileId, $parentSubjectId, $id]);
+                $pdo->prepare('UPDATE subjects SET subject_name=?, subject_code=?, weight_profile_id=?, parent_subject_id=?, sort_order=? WHERE id=?')
+                    ->execute([$name, $code, $weightProfileId, $parentSubjectId, $sortOrder, $id]);
                 flash_set('success', 'Subject updated.');
             } catch (PDOException $e) {
                 flash_set('error', 'Could not update subject — subject code may already be in use.');
@@ -57,7 +58,7 @@ $subjects = $pdo->query('SELECT sub.*, wp.profile_name, parent.subject_name AS p
     FROM subjects sub
     JOIN grade_weight_profiles wp ON wp.id = sub.weight_profile_id
     LEFT JOIN subjects parent ON parent.id = sub.parent_subject_id
-    ORDER BY sub.subject_name')->fetchAll();
+    ORDER BY sub.sort_order, sub.subject_name')->fetchAll();
 // Which subject ids are themselves a compound parent (have at least one child) — a subject
 // that's part of one compound (e.g. Music-Arts) can't also host children of its own.
 $parentIds = $pdo->query('SELECT DISTINCT parent_subject_id FROM subjects WHERE parent_subject_id IS NOT NULL')->fetchAll(PDO::FETCH_COLUMN);
@@ -91,6 +92,9 @@ render_header('Subjects');
     <input type="text" name="subject_name" required value="<?= h($editing['subject_name'] ?? '') ?>" class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
     <label class="block text-sm font-medium text-slate-600 mb-1">Subject code</label>
     <input type="text" name="subject_code" required value="<?= h($editing['subject_code'] ?? '') ?>" class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+    <label class="block text-sm font-medium text-slate-600 mb-1">Sort order</label>
+    <input type="number" name="sort_order" value="<?= h($editing['sort_order'] ?? 100) ?>" class="w-full mb-1 px-3 py-2 border border-slate-300 rounded-lg">
+    <p class="text-xs text-slate-400 mb-4">Controls display order on Consolidated Grades and Card Slips — lower numbers appear first. A compound component's own value is unused; it always displays right after its parent.</p>
     <label class="block text-sm font-medium text-slate-600 mb-1">Weight profile</label>
     <select name="weight_profile_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
       <option value="">Select a weight profile…</option>
@@ -111,7 +115,7 @@ render_header('Subjects');
 <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
   <table class="w-full text-sm">
     <thead class="bg-slate-50 text-slate-500 text-xs uppercase">
-      <tr><th class="text-left px-4 py-3">Subject</th><th class="text-left px-4 py-3">Code</th><th class="text-left px-4 py-3">Weight Profile</th><th class="text-left px-4 py-3">Status</th><th class="px-4 py-3"></th></tr>
+      <tr><th class="text-left px-4 py-3">Subject</th><th class="text-left px-4 py-3">Code</th><th class="text-left px-4 py-3">Order</th><th class="text-left px-4 py-3">Weight Profile</th><th class="text-left px-4 py-3">Status</th><th class="px-4 py-3"></th></tr>
     </thead>
     <tbody class="divide-y divide-slate-100">
       <?php foreach ($subjects as $s): ?>
@@ -125,6 +129,7 @@ render_header('Subjects');
           <?php endif; ?>
         </td>
         <td class="px-4 py-3 text-slate-600"><?= h($s['subject_code']) ?></td>
+        <td class="px-4 py-3 text-slate-500"><?= $s['parent_subject_id'] ? '—' : (int) $s['sort_order'] ?></td>
         <td class="px-4 py-3 text-slate-600"><?= h($s['profile_name']) ?></td>
         <td class="px-4 py-3"><?= $s['is_active'] ? '<span class="text-emerald-600">Active</span>' : '<span class="text-slate-400">Inactive</span>' ?></td>
         <td class="px-4 py-3 text-right space-x-2">
