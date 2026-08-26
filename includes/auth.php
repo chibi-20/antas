@@ -140,6 +140,34 @@ function require_supervised_subject(int $subjectId, int $schoolYearId): array
     return $subject;
 }
 
+/**
+ * Head Teacher guard: a section counts as "yours" for the Grade Summary/At Risk tabs if at
+ * least one of the subjects you supervise is actually taught there — same shape as
+ * require_own_section(), just checked via head_teacher_assignments instead of adviser_id.
+ */
+function require_supervised_section(int $sectionId, int $schoolYearId): array
+{
+    $user = require_role(['subject_teacher', 'admin']);
+    $stmt = db()->prepare('SELECT sec.*, gl.name AS grade_level FROM sections sec
+        JOIN grade_levels gl ON gl.id = sec.grade_level_id WHERE sec.id = ?');
+    $stmt->execute([$sectionId]);
+    $section = $stmt->fetch();
+    if (!$section) {
+        forbidden('Section not found.');
+    }
+    if ($user['role'] !== 'admin') {
+        $stmt = db()->prepare('SELECT 1 FROM section_subject_teachers sst
+            JOIN head_teacher_assignments hta ON hta.subject_id = sst.subject_id AND hta.school_year_id = sst.school_year_id
+            WHERE sst.section_id = ? AND sst.school_year_id = ? AND sst.is_active = 1
+              AND hta.head_teacher_id = ? AND hta.is_active = 1 LIMIT 1');
+        $stmt->execute([$sectionId, $schoolYearId, $user['id']]);
+        if (!$stmt->fetchColumn()) {
+            forbidden('You do not supervise any subject taught in this section.');
+        }
+    }
+    return $section;
+}
+
 /** Subject Teacher guard: the section_subject_teachers row must belong to the current user. */
 function require_own_assignment(int $sectionSubjectTeacherId): array
 {
