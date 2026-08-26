@@ -98,6 +98,7 @@ foreach ($groups as $g) {
 }
 
 render_header('Review Dashboard', 'Monitor and review grade consolidation submissions across all classes.');
+echo ht_tab_nav('review');
 ?>
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
   <?php
