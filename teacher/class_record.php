@@ -42,7 +42,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $componentType = (string) ($_POST['component_type'] ?? '');
         $itemName = trim((string) ($_POST['item_name'] ?? ''));
         $highest = (float) ($_POST['highest_possible_score'] ?? 0);
-        if (!in_array($componentType, ['WW', 'PT', 'EX'], true) || $itemName === '' || $highest <= 0) {
+        // Examinations is a fixed Summative Test 1 / Summative Test 2 / Term Exam structure
+        // (see EX_WEIGHTS in gradeCalc.php) — no adding a 4th item to it.
+        if (!in_array($componentType, ['WW', 'PT'], true) || $itemName === '' || $highest <= 0) {
             flash_set('error', 'Item name, component, and a highest possible score above 0 are required.');
         } else {
             $sort = (int) $pdo->query("SELECT COALESCE(MAX(sort_order), 0) + 1 FROM assessment_items WHERE section_subject_teacher_id = $sstId AND term = $term AND component_type = " . $pdo->quote($componentType))->fetchColumn();
@@ -53,9 +55,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } elseif ($action === 'delete_item') {
         $itemId = (int) $_POST['item_id'];
-        $pdo->prepare('DELETE FROM assessment_items WHERE id = ? AND section_subject_teacher_id = ?')->execute([$itemId, $sstId]);
-        recompute_term_grades_for_assignment($sstId, $term);
-        flash_set('success', 'Item removed.');
+        // Never allow deleting an Examinations item — the fixed 3-item structure is what
+        // makes the 30/30/40 weighted formula meaningful (see EX_WEIGHTS in gradeCalc.php).
+        $deleted = $pdo->prepare("DELETE FROM assessment_items WHERE id = ? AND section_subject_teacher_id = ? AND component_type <> 'EX'");
+        $deleted->execute([$itemId, $sstId]);
+        if ($deleted->rowCount() > 0) {
+            recompute_term_grades_for_assignment($sstId, $term);
+            flash_set('success', 'Item removed.');
+        } else {
+            flash_set('error', 'Examinations items cannot be removed.');
+        }
     } elseif ($action === 'save_scores') {
         // Column headers (name + highest score) are edited inline in the same grid/form —
         // save any changes before scores, since recompute below reads them fresh either way.
@@ -78,7 +87,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         foreach ($scores as $itemId => $byStudent) {
             foreach ($byStudent as $studentId => $rawValue) {
                 $rawValue = trim((string) $rawValue);
-                $upsert->execute([(int) $studentId, (int) $itemId, $rawValue === '' ? null : (float) $rawValue]);
+                // Whole numbers only — the input's step="1" already nudges this, but that's
+                // client-side only, so round here too rather than trust it.
+                $upsert->execute([(int) $studentId, (int) $itemId, $rawValue === '' ? null : (float) round((float) $rawValue)]);
             }
         }
         recompute_term_grades_for_assignment($sstId, $term);
@@ -90,11 +101,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect("/teacher/class_record.php?sst_id=$sstId&term=$term");
 }
 
-// Auto-template the standard 5 Written Work / 3 Performance Task / 3 Examination (2
-// summative + 1 term exam) items the first time this term is opened, so the teacher lands
-// on a ready-to-fill grid instead of building columns one at a time. Only fires while the
-// term has never been touched (status still not_started) — if a teacher deliberately
-// deletes items afterward, they won't silently come back.
+// Auto-template the standard 5 Written Work / 3 Performance Task / 3 Examination (Summative
+// Test 1, Summative Test 2, Term Exam) items the first time this term is opened, so the
+// teacher lands on a ready-to-fill grid instead of building columns one at a time. Only
+// fires while the term has never been touched (status still not_started) — if a teacher
+// deliberately deletes a WW/PT item afterward, it won't silently come back (EX items can't
+// be deleted at all — see EX_WEIGHTS below).
 if ($editable && (!$submission || $submission['status'] === 'not_started')) {
     $existingCount = $pdo->prepare('SELECT COUNT(*) FROM assessment_items WHERE section_subject_teacher_id = ? AND term = ?');
     $existingCount->execute([$sstId, $term]);
@@ -104,10 +116,15 @@ if ($editable && (!$submission || $submission['status'] === 'not_started')) {
             'PT' => ['PT 1', 'PT 2', 'PT 3'],
             'EX' => ['Summative Test 1', 'Summative Test 2', 'Term Exam'],
         ];
-        $insertDefault = $pdo->prepare('INSERT INTO assessment_items (section_subject_teacher_id, term, component_type, item_name, highest_possible_score, sort_order) VALUES (?, ?, ?, ?, 100, ?)');
+        // EX's default point totals mirror a realistic 25-item/25-item/50-item test split —
+        // they're independent of the 30%/30%/40% WEIGHT breakdown gradeCalc.php applies (a
+        // teacher can still edit these to match their actual test's item count).
+        $exHighest = [25, 25, 50];
+        $insertDefault = $pdo->prepare('INSERT INTO assessment_items (section_subject_teacher_id, term, component_type, item_name, highest_possible_score, sort_order) VALUES (?, ?, ?, ?, ?, ?)');
         foreach ($defaults as $type => $names) {
             foreach ($names as $i => $name) {
-                $insertDefault->execute([$sstId, $term, $type, $name, $i + 1]);
+                $highest = $type === 'EX' ? $exHighest[$i] : 100;
+                $insertDefault->execute([$sstId, $term, $type, $name, $highest, $i + 1]);
             }
         }
     }
@@ -275,8 +292,8 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
       <select name="component_type" required class="px-3 py-2 border border-slate-300 rounded-lg">
         <option value="WW">Written Work</option>
         <option value="PT">Performance Task</option>
-        <option value="EX">Examinations</option>
       </select>
+      <p class="text-[10px] text-slate-400 mt-1">Examinations is fixed to Summative Test 1, Summative Test 2 &amp; Term Exam.</p>
     </div>
     <div>
       <label class="block text-xs font-medium text-slate-500 mb-1">Item name</label>
@@ -325,9 +342,9 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
                   <input type="number" step="0.01" min="0.01" name="item_highest[<?= (int) $item['id'] ?>]" value="<?= h(rtrim(rtrim((string) $item['highest_possible_score'], '0'), '.')) ?>"
                     <?= $editable ? '' : 'disabled' ?>
                     class="w-10 text-center text-[10px] font-normal text-slate-400 border-b border-dashed border-slate-300 focus:border-accent-500 outline-none bg-transparent disabled:border-transparent">
-                  <span class="text-[10px] font-normal text-slate-400"><?= $componentLabels[$type] ?></span>
+                  <span class="text-[10px] font-normal text-slate-800"><?= $componentLabels[$type] ?></span>
                 </div>
-                <?php if ($editable): ?>
+                <?php if ($editable && $type !== 'EX'): ?>
                 <button type="submit" form="delete-item-<?= (int) $item['id'] ?>" class="text-rose-400 hover:text-rose-600 text-[10px]">remove</button>
                 <?php endif; ?>
               </th>
@@ -359,7 +376,7 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
           <?php foreach (['WW', 'PT', 'EX'] as $type): ?>
             <?php foreach ($itemsByType[$type] as $item): ?>
               <td class="px-3 py-2 text-center">
-                <input type="number" step="0.01" min="0" max="<?= h($item['highest_possible_score']) ?>"
+                <input type="number" step="1" min="0" max="<?= h($item['highest_possible_score']) ?>"
                   name="scores[<?= (int) $item['id'] ?>][<?= (int) $student['id'] ?>]"
                   value="<?= h($scoreLookup[$item['id']][$student['id']] ?? '') ?>"
                   data-row="<?= $rowIndex ?>" data-col="<?= $itemColumns[$item['id']] ?>"
@@ -404,7 +421,13 @@ window.addEventListener('DOMContentLoaded', function () {
   initGradePreview({
     weights: { ww: <?= (int) $weights['written_work_pct'] ?>, pt: <?= (int) $weights['performance_task_pct'] ?>, ex: <?= (int) $weights['examination_pct'] ?> },
     transmutation: <?= json_encode($transmutationTable) ?>,
-    items: <?= json_encode(array_map(fn($i) => ['id' => (int) $i['id'], 'type' => $i['component_type'], 'highest' => (float) $i['highest_possible_score']], $items)) ?>,
+    items: <?= json_encode(array_map(function ($i) use ($itemsByType) {
+        $exIndex = null;
+        if ($i['component_type'] === 'EX') {
+            $exIndex = array_search($i['id'], array_column($itemsByType['EX'], 'id'), true);
+        }
+        return ['id' => (int) $i['id'], 'type' => $i['component_type'], 'highest' => (float) $i['highest_possible_score'], 'exIndex' => $exIndex];
+    }, $items)) ?>,
     students: <?= json_encode(array_map(fn($s) => (int) $s['id'], $students)) ?>
   });
   initPasteGrid();

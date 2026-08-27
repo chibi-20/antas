@@ -218,7 +218,7 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
           <?php foreach ($itemsByType[$type] as $item): ?>
             <th class="text-center px-3 py-3 whitespace-nowrap">
               <div><?= h($item['item_name']) ?></div>
-              <div class="text-[10px] font-normal text-slate-400">/<?= rtrim(rtrim((string) $item['highest_possible_score'], '0'), '.') ?> · <?= $componentLabels[$type] ?></div>
+              <div class="text-[10px] font-normal text-slate-400">/<?= rtrim(rtrim((string) $item['highest_possible_score'], '0'), '.') ?> · <span class="text-slate-800"><?= $componentLabels[$type] ?></span></div>
             </th>
           <?php endforeach; ?>
         <?php endforeach; ?>

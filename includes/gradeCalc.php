@@ -41,6 +41,59 @@ function compute_transmuted_grade(?float $initialGrade): ?float
     return $value !== false ? (float) $value : null;
 }
 
+// DepEd Order No. 15 s. 2026's breakdown of the Examinations component: Summative Test 1 =
+// 30%, Summative Test 2 = 30%, Term Exam = 40% — of the EX component itself, not of the
+// subject's overall grade (that's still the weight profile's examination_pct). Applied by
+// POSITION (sort_order), since teacher/class_record.php locks EX to exactly this 3-item
+// structure — no adding/removing/reordering, so the 1st/2nd/3rd item is always ST1/ST2/TE.
+const EX_WEIGHTS = [0.30, 0.30, 0.40];
+
+/**
+ * Examinations gets its own weighted formula instead of WW/PT's plain sum-of-points (see
+ * EX_WEIGHTS above). Follows the same "running grade from whatever's entered" rule the other
+ * components use — an item not yet scored simply doesn't contribute, and the remaining
+ * weights are renormalized so the result still lands on a 0-100 scale.
+ */
+function compute_ex_percentage(int $studentId, int $sstId, int $term): ?float
+{
+    $stmt = db()->prepare('SELECT ai.highest_possible_score, ss.raw_score
+        FROM assessment_items ai
+        LEFT JOIN student_scores ss ON ss.assessment_item_id = ai.id AND ss.student_id = ?
+        WHERE ai.section_subject_teacher_id = ? AND ai.term = ? AND ai.component_type = \'EX\'
+        ORDER BY ai.sort_order, ai.id');
+    $stmt->execute([$studentId, $sstId, $term]);
+    $rows = $stmt->fetchAll();
+
+    if (count($rows) !== 3) {
+        // Legacy/non-standard data (e.g. a term created before EX was locked to exactly 3
+        // items) — fall back to the plain sum-of-points method every other component uses.
+        $rawTotal = 0.0;
+        $highestTotal = 0.0;
+        $entered = 0;
+        foreach ($rows as $row) {
+            if ($row['raw_score'] === null) {
+                continue;
+            }
+            $rawTotal += (float) $row['raw_score'];
+            $highestTotal += (float) $row['highest_possible_score'];
+            $entered++;
+        }
+        return $entered === 0 ? null : compute_percentage($rawTotal, $highestTotal);
+    }
+
+    $weightedSum = 0.0;
+    $weightEntered = 0.0;
+    foreach ($rows as $i => $row) {
+        if ($row['raw_score'] === null || (float) $row['highest_possible_score'] <= 0) {
+            continue;
+        }
+        $itemPct = (float) $row['raw_score'] / (float) $row['highest_possible_score'] * 100;
+        $weightedSum += $itemPct * EX_WEIGHTS[$i];
+        $weightEntered += EX_WEIGHTS[$i];
+    }
+    return $weightEntered > 0 ? round($weightedSum / $weightEntered, 2) : null;
+}
+
 /** Recomputes and persists term_grades for one student/subject/term from student_scores. */
 function recompute_term_grade(int $studentId, int $subjectId, int $term, int $schoolYearId): void
 {
@@ -62,14 +115,16 @@ function recompute_term_grade(int $studentId, int $subjectId, int $term, int $sc
     if (!$sstId) {
         return;
     }
+    $sstId = (int) $sstId;
 
-    // A component (WW/PT/EX) contributes a running percentage as soon as ANY of its items
-    // has a score — computed only from the items actually entered so far, not penalized for
-    // ones still blank. This is deliberate: requiring every single item before showing
-    // anything meant one forgotten/absent score could hide a student's entire grade (and any
-    // failing grade with it) behind a blank "—" all the way through to the printed card
-    // slip. The number here is a running grade that updates as more scores come in, same as
-    // a normal gradebook — not a claim that the term is complete.
+    // A component (WW/PT) contributes a running percentage as soon as ANY of its items has a
+    // score — computed only from the items actually entered so far, not penalized for ones
+    // still blank. This is deliberate: requiring every single item before showing anything
+    // meant one forgotten/absent score could hide a student's entire grade (and any failing
+    // grade with it) behind a blank "—" all the way through to the printed card slip. The
+    // number here is a running grade that updates as more scores come in, same as a normal
+    // gradebook — not a claim that the term is complete. EX uses its own weighted formula
+    // (compute_ex_percentage(), same running-grade philosophy) instead of this plain sum.
     $componentPct = [];
     $itemStmt = $pdo->prepare('SELECT
             COALESCE(SUM(CASE WHEN ss.raw_score IS NOT NULL THEN ss.raw_score ELSE 0 END), 0) AS raw_total,
@@ -78,12 +133,13 @@ function recompute_term_grade(int $studentId, int $subjectId, int $term, int $sc
         FROM assessment_items ai
         LEFT JOIN student_scores ss ON ss.assessment_item_id = ai.id AND ss.student_id = ?
         WHERE ai.section_subject_teacher_id = ? AND ai.term = ? AND ai.component_type = ?');
-    foreach (['WW', 'PT', 'EX'] as $type) {
+    foreach (['WW', 'PT'] as $type) {
         $itemStmt->execute([$studentId, $sstId, $term, $type]);
         $row = $itemStmt->fetch();
         $hasNoData = (int) $row['entered_count'] === 0;
         $componentPct[$type] = $hasNoData ? null : compute_percentage((float) $row['raw_total'], (float) $row['highest_total']);
     }
+    $componentPct['EX'] = compute_ex_percentage($studentId, $sstId, $term);
 
     $initial = compute_initial_grade($componentPct['WW'], $componentPct['PT'], $componentPct['EX'], $weights);
     $transmuted = compute_transmuted_grade($initial);

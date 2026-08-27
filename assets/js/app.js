@@ -198,16 +198,29 @@ function initGradePreview(config) {
     return document.querySelector('input[name="scores[' + itemId + '][' + studentId + ']"]');
   }
 
+  // DepEd Order No. 15 s. 2026's breakdown of the Examinations component — mirrors
+  // EX_WEIGHTS in includes/gradeCalc.php. Applied by position (exIndex, from the item's
+  // sort_order), since EX is locked to exactly Summative Test 1 / Summative Test 2 / Term
+  // Exam with no reordering.
+  var EX_WEIGHTS = [0.30, 0.30, 0.40];
+
   function recalcStudent(studentId) {
     // Mirrors gradeCalc.php's recompute_term_grade(): a component contributes a running
     // percentage from whichever of its items are filled so far, not just once every item is
     // — so a grade (and any failing grade with it) shows up early instead of hiding behind a
-    // blank until the whole term is entered.
-    var totals = { WW: { raw: 0, highest: 0, filled: 0 }, PT: { raw: 0, highest: 0, filled: 0 }, EX: { raw: 0, highest: 0, filled: 0 } };
+    // blank until the whole term is entered. WW/PT are a plain sum of points; EX is instead a
+    // weighted average of its 3 items' own percentages (see EX_WEIGHTS), falling back to the
+    // plain-sum method if there aren't exactly 3 EX items (shouldn't normally happen).
+    var totals = { WW: { raw: 0, highest: 0, filled: 0 }, PT: { raw: 0, highest: 0, filled: 0 } };
+    var exItems = [];
 
     items.forEach(function (item) {
       var input = scoreInput(item.id, studentId);
       if (!input) return;
+      if (item.type === 'EX') {
+        exItems.push(item);
+        return;
+      }
       var c = totals[item.type];
       if (input.value !== '' && !isNaN(parseFloat(input.value))) {
         c.raw += parseFloat(input.value);
@@ -217,10 +230,34 @@ function initGradePreview(config) {
     });
 
     var pct = {};
-    ['WW', 'PT', 'EX'].forEach(function (type) {
+    ['WW', 'PT'].forEach(function (type) {
       var c = totals[type];
       pct[type] = (c.filled > 0 && c.highest > 0) ? (c.raw / c.highest * 100) : null;
     });
+
+    if (exItems.length === 3) {
+      var weightedSum = 0, weightEntered = 0;
+      exItems.forEach(function (item) {
+        var input = scoreInput(item.id, studentId);
+        var val = input.value !== '' ? parseFloat(input.value) : NaN;
+        if (isNaN(val) || item.highest <= 0 || item.exIndex === null) return;
+        var itemPct = val / item.highest * 100;
+        weightedSum += itemPct * EX_WEIGHTS[item.exIndex];
+        weightEntered += EX_WEIGHTS[item.exIndex];
+      });
+      pct.EX = weightEntered > 0 ? (weightedSum / weightEntered) : null;
+    } else {
+      var exRaw = 0, exHighest = 0, exFilled = 0;
+      exItems.forEach(function (item) {
+        var input = scoreInput(item.id, studentId);
+        if (input.value !== '' && !isNaN(parseFloat(input.value))) {
+          exRaw += parseFloat(input.value);
+          exHighest += item.highest;
+          exFilled++;
+        }
+      });
+      pct.EX = (exFilled > 0 && exHighest > 0) ? (exRaw / exHighest * 100) : null;
+    }
 
     var initial = null;
     if (pct.WW !== null && pct.PT !== null && pct.EX !== null) {
