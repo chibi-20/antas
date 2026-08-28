@@ -32,6 +32,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $sec = $sectionLabelStmt->fetch();
         $label = $sec ? $sec['grade_level'] . ' - ' . $sec['section_name'] : "section #$sectionId";
 
+        // Bulk Assign only ever creates whole-year/all-students rows — but a section may
+        // already have TLE-style per-term or per-sex rows for this subject, which the DB's
+        // unique key alone can't catch (different term_scope/sex_scope tuple, not a literal
+        // duplicate). Same conflict check admin/assignments.php uses for one-off assignments.
+        $conflict = sst_scope_conflict($pdo, $sectionId, $subjectId, $schoolYearId, 0, 'ALL');
+        if ($conflict) {
+            $skipped[] = "$label — $conflict";
+            continue;
+        }
+
         try {
             $pdo->beginTransaction();
             $insertSst->execute([$sectionId, $subjectId, $teacherId, $schoolYearId]);

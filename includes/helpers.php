@@ -201,21 +201,52 @@ function get_consolidated_data(int $sectionId, int $schoolYearId, int $term): ar
 {
     $pdo = db();
 
-    $rows = $pdo->prepare('SELECT sst.id AS sst_id, sub.id AS subject_id, sub.subject_name, sub.parent_subject_id, sub.sort_order, ss.status
+    // A subject can now have more than one section_subject_teachers row per section (a
+    // different teacher each term, or split by sex — see
+    // db/migrations/0011_scoped_teacher_assignments.sql) — filtered here to just the rows
+    // relevant to the requested term (term_scope=0 means "every term"). Every matching row is
+    // accumulated into that subject's 'assignments' list rather than the old one-row-per-
+    // subject assumption, which used to silently let a later row clobber an earlier one.
+    $rows = $pdo->prepare('SELECT sst.id AS sst_id, sst.sex_scope, sub.id AS subject_id, sub.subject_name, sub.parent_subject_id, sub.sort_order, ss.status
         FROM section_subject_teachers sst
         JOIN subjects sub ON sub.id = sst.subject_id
         LEFT JOIN submission_status ss ON ss.section_subject_teacher_id = sst.id AND ss.term = ?
-        WHERE sst.section_id = ? AND sst.school_year_id = ? AND sst.is_active = 1');
-    $rows->execute([$term, $sectionId, $schoolYearId]);
+        WHERE sst.section_id = ? AND sst.school_year_id = ? AND sst.is_active = 1
+          AND (sst.term_scope = 0 OR sst.term_scope = ?)');
+    $rows->execute([$term, $sectionId, $schoolYearId, $term]);
     $rows = $rows->fetchAll();
+
+    $subjectMeta = [];
+    $assignmentsBySubject = [];
+    foreach ($rows as $row) {
+        $sid = (int) $row['subject_id'];
+        $subjectMeta[$sid] = ['subject_name' => $row['subject_name'], 'parent_subject_id' => $row['parent_subject_id'], 'sort_order' => (int) $row['sort_order']];
+        $assignmentsBySubject[$sid][] = ['sst_id' => (int) $row['sst_id'], 'sex_scope' => $row['sex_scope'], 'status' => $row['status'] ?? 'not_started'];
+    }
 
     $subjects = [];
     $childGroups = [];
-    foreach ($rows as $row) {
-        if ($row['parent_subject_id'] === null) {
-            $subjects[(int) $row['subject_id']] = $row + ['is_child' => false];
+    foreach ($subjectMeta as $sid => $meta) {
+        $assignments = $assignmentsBySubject[$sid];
+        // Published only once EVERY assignment covering this subject/term is published — a
+        // sex-split subject (e.g. boys' TLE published, girls' not) is "pending" as a whole
+        // for this aggregate; per-student resolution (subject_assignment_for_student()) is
+        // what callers actually need for the Pending badge/review link on a specific row.
+        $status = count(array_filter($assignments, fn($a) => $a['status'] !== 'published')) === 0 ? 'published' : 'pending';
+        $entry = [
+            'sst_id' => count($assignments) === 1 ? $assignments[0]['sst_id'] : null,
+            'subject_id' => $sid,
+            'subject_name' => $meta['subject_name'],
+            'parent_subject_id' => $meta['parent_subject_id'],
+            'sort_order' => $meta['sort_order'],
+            'status' => $status,
+            'assignments' => $assignments,
+            'is_child' => $meta['parent_subject_id'] !== null,
+        ];
+        if ($meta['parent_subject_id'] === null) {
+            $subjects[$sid] = $entry;
         } else {
-            $childGroups[(int) $row['parent_subject_id']][] = $row + ['is_child' => true];
+            $childGroups[(int) $meta['parent_subject_id']][] = $entry;
         }
     }
     if ($childGroups) {
@@ -234,6 +265,10 @@ function get_consolidated_data(int $sectionId, int $schoolYearId, int $term): ar
                 'sort_order' => (int) $parent['sort_order'],
                 'status' => $allPublished ? 'published' : 'pending',
                 'is_child' => false,
+                // No real assignments of its own — its grade is the merged average of its
+                // children (recompute_compound_term_grade()); subject_assignment_for_student()
+                // falls back to this entry's own 'status' aggregate for a compound parent.
+                'assignments' => [],
                 'children' => $children,
             ];
         }
@@ -278,15 +313,21 @@ function get_consolidated_data(int $sectionId, int $schoolYearId, int $term): ar
     // Compound children (e.g. Music-Arts, PE-Health) are intentionally excluded from
     // effective_term_grades — they never count toward the average. But they still need to be
     // DISPLAYED, so fetch their own published grades separately, same publish-gate logic as
-    // that view's plain-subject branch, scoped to just the child subject ids.
+    // that view's plain-subject branch (including the term_scope/sex_scope/is_active
+    // predicates — without them, a sex-split child subject would double-count or leak here
+    // exactly like effective_term_grades used to), scoped to just the child subject ids.
     $childSubjectIds = array_values(array_map(fn($s) => (int) $s['subject_id'], array_filter($subjects, fn($s) => $s['is_child'])));
     if ($childSubjectIds) {
         $childPlaceholders = implode(',', array_fill(0, count($childSubjectIds), '?'));
         $stmt = $pdo->prepare("SELECT tg.student_id, tg.term, tg.subject_id, tg.transmuted_grade
             FROM term_grades tg
+            JOIN students st ON st.id = tg.student_id
             JOIN section_subject_teachers sst ON sst.subject_id = tg.subject_id AND sst.school_year_id = tg.school_year_id
             JOIN submission_status ss ON ss.section_subject_teacher_id = sst.id AND ss.term = tg.term
             WHERE ss.status = 'published' AND sst.section_id = ? AND tg.school_year_id = ?
+              AND sst.is_active = 1
+              AND (sst.term_scope = 0 OR sst.term_scope = tg.term)
+              AND (sst.sex_scope = 'ALL' OR sst.sex_scope = st.sex)
               AND tg.term IN ($termsPlaceholders) AND tg.subject_id IN ($childPlaceholders)");
         $stmt->execute(array_merge([$sectionId, $schoolYearId], range(1, $term), $childSubjectIds));
         foreach ($stmt->fetchAll() as $row) {
@@ -333,4 +374,272 @@ function get_consolidated_data(int $sectionId, int $schoolYearId, int $term): ar
         'finalGrades' => $finalGrades,
         'averages' => $averages,
     ];
+}
+
+/**
+ * Resolves which of a subject's (possibly several, per
+ * db/migrations/0011_scoped_teacher_assignments.sql) assignments actually covers a given
+ * student, by sex — an 'ALL' assignment as fallback, or null if the subject has no real
+ * assignments of its own (a compound parent like MAPEH; callers should fall back to that
+ * subject entry's own 'status', already correctly aggregated from its children).
+ *
+ * Needed because a sex-split subject (e.g. one teacher for boys' TLE, another for girls') can
+ * be published for one half and still pending for the other — "is this subject published"
+ * stopped being a single fact per subject the moment more than one assignment can cover it.
+ *
+ * @param array{assignments: array<int, array{sst_id:int, sex_scope:string, status:string}>} $subject
+ * @param array{sex: string} $student
+ */
+function subject_assignment_for_student(array $subject, array $student): ?array
+{
+    foreach ($subject['assignments'] as $assignment) {
+        if ($assignment['sex_scope'] === $student['sex']) {
+            return $assignment;
+        }
+    }
+    foreach ($subject['assignments'] as $assignment) {
+        if ($assignment['sex_scope'] === 'ALL') {
+            return $assignment;
+        }
+    }
+    return null;
+}
+
+/**
+ * Checks whether inserting/updating a section_subject_teachers row with the given
+ * (term_scope, sex_scope) would violate the TLE scoping business rule: active rows for a
+ * (section, subject, school year) must be either one term_scope=0/sex_scope=ALL row, or 1-3
+ * rows with distinct specific term_scope values, each covered term being either one ALL row
+ * or an M+F pair. The DB unique key only rejects exact-duplicate tuples — it can't catch a
+ * term_scope=0 row coexisting with a specific-term row, or an ALL row coexisting with an M/F
+ * row for the same term. Returns an error message if there's a conflict, null if clear.
+ */
+function sst_scope_conflict(PDO $pdo, int $sectionId, int $subjectId, int $schoolYearId, int $termScope, string $sexScope, ?int $excludeId = null): ?string
+{
+    $sql = 'SELECT term_scope, sex_scope FROM section_subject_teachers
+        WHERE section_id = ? AND subject_id = ? AND school_year_id = ? AND is_active = 1';
+    $params = [$sectionId, $subjectId, $schoolYearId];
+    if ($excludeId !== null) {
+        $sql .= ' AND id != ?';
+        $params[] = $excludeId;
+    }
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    $existing = $stmt->fetchAll();
+
+    foreach ($existing as $row) {
+        $existingTerm = (int) $row['term_scope'];
+        if (($termScope === 0) !== ($existingTerm === 0)) {
+            return 'A whole-year assignment cannot coexist with a term-specific assignment for the same section and subject — deactivate the other one first.';
+        }
+    }
+
+    foreach ($existing as $row) {
+        if ((int) $row['term_scope'] !== $termScope) {
+            continue;
+        }
+        $existingSex = $row['sex_scope'];
+        if ($sexScope === 'ALL' || $existingSex === 'ALL') {
+            return 'This term already has an assignment for this section/subject that covers all students — deactivate it first.';
+        }
+        if ($existingSex === $sexScope) {
+            return 'This term already has a ' . ($sexScope === 'M' ? 'Male-only' : 'Female-only') . ' assignment for this section/subject.';
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Refuses to narrow an existing assignment's coverage (whole-year -> term-specific, or
+ * all-students -> one sex) once it already has real grading activity — assessment items or
+ * any submission_status past not_started. Narrowing would silently orphan scores/status rows
+ * that belong to terms/students the row no longer covers; that's a data-integrity decision
+ * for the admin to resolve manually (e.g. deactivate and recreate), not something to patch up.
+ */
+function sst_narrowing_blocked(PDO $pdo, array $oldRow, int $newTermScope, string $newSexScope): ?string
+{
+    $isNarrowing = ((int) $oldRow['term_scope'] === 0 && $newTermScope !== 0)
+        || ($oldRow['sex_scope'] === 'ALL' && $newSexScope !== 'ALL');
+    if (!$isNarrowing) {
+        return null;
+    }
+
+    $sstId = (int) $oldRow['id'];
+    $itemsStmt = $pdo->prepare('SELECT COUNT(*) FROM assessment_items WHERE section_subject_teacher_id = ?');
+    $itemsStmt->execute([$sstId]);
+    if ((int) $itemsStmt->fetchColumn() > 0) {
+        return 'This assignment already has assessment items — narrowing its Term or Applies To scope is refused. Deactivate it and create a new assignment instead.';
+    }
+
+    $statusStmt = $pdo->prepare("SELECT COUNT(*) FROM submission_status WHERE section_subject_teacher_id = ? AND status <> 'not_started'");
+    $statusStmt->execute([$sstId]);
+    if ((int) $statusStmt->fetchColumn() > 0) {
+        return 'This assignment already has submitted grading activity — narrowing its Term or Applies To scope is refused. Deactivate it and create a new assignment instead.';
+    }
+
+    return null;
+}
+
+/**
+ * Read-only display helper for the self-claim UI (teacher/claim.php): reports which parts
+ * of a (section, subject, school year) are still open to claim vs. already taken, and by
+ * whom. This is NEVER the write-time authority — sst_scope_conflict() re-validates at
+ * submit time regardless of what this returns, since a slot shown open here can be claimed
+ * by someone else microseconds later.
+ *
+ * Returns ['whole_year_open' => bool, 'whole_year_taken_by' => ?string,
+ *          'terms' => [1 => ['open' => [...subset of ALL/M/F...], 'taken' => ['M'=>name,...]], 2 => [...], 3 => [...]]]
+ * — 'terms' is empty when the whole year is either open or taken as one unit, since the
+ * business rule (see sst_scope_conflict()) never lets term_scope=0 coexist with per-term rows.
+ */
+function claim_availability(PDO $pdo, int $sectionId, int $subjectId, int $schoolYearId): array
+{
+    $stmt = $pdo->prepare('SELECT sst.term_scope, sst.sex_scope, u.full_name AS teacher_name
+        FROM section_subject_teachers sst
+        JOIN users u ON u.id = sst.teacher_id
+        WHERE sst.section_id = ? AND sst.subject_id = ? AND sst.school_year_id = ? AND sst.is_active = 1');
+    $stmt->execute([$sectionId, $subjectId, $schoolYearId]);
+    $rows = $stmt->fetchAll();
+
+    if (!$rows) {
+        return ['whole_year_open' => true, 'whole_year_taken_by' => null, 'terms' => []];
+    }
+
+    foreach ($rows as $row) {
+        if ((int) $row['term_scope'] === 0) {
+            return ['whole_year_open' => false, 'whole_year_taken_by' => $row['teacher_name'], 'terms' => []];
+        }
+    }
+
+    $terms = [];
+    for ($t = 1; $t <= 3; $t++) {
+        $taken = [];
+        foreach ($rows as $row) {
+            if ((int) $row['term_scope'] === $t) {
+                $taken[$row['sex_scope']] = $row['teacher_name'];
+            }
+        }
+        $open = isset($taken['ALL']) ? [] : array_values(array_diff(['ALL', 'M', 'F'], array_keys($taken)));
+        if ($taken && !isset($taken['ALL'])) {
+            // Once one sex is claimed, "All Students" is no longer offered for this term —
+            // it would conflict with the half already taken.
+            $open = array_values(array_diff($open, ['ALL']));
+        }
+        $terms[$t] = ['open' => $open, 'taken' => $taken];
+    }
+
+    return ['whole_year_open' => false, 'whole_year_taken_by' => null, 'terms' => $terms];
+}
+
+/**
+ * Sections a teacher can browse to self-claim, resolved from their active claim_eligibility
+ * rows (subject + grade level) joined to that grade level's active sections for the school
+ * year, each annotated with claim_availability(). Returned grouped by (subject, grade level)
+ * — one group per eligibility row, since a teacher can hold several (e.g. TLE Grade 10 +
+ * TLE Grade 7 + Araling Panlipunan Grade 8 all at once).
+ */
+function get_claimable_sections(int $teacherId, int $schoolYearId): array
+{
+    $pdo = db();
+    $eligStmt = $pdo->prepare('SELECT ce.subject_id, ce.grade_level_id, sub.subject_name, gl.name AS grade_level, gl.sort_order
+        FROM claim_eligibility ce
+        JOIN subjects sub ON sub.id = ce.subject_id
+        JOIN grade_levels gl ON gl.id = ce.grade_level_id
+        WHERE ce.teacher_id = ? AND ce.school_year_id = ? AND ce.is_active = 1
+        ORDER BY gl.sort_order, sub.subject_name');
+    $eligStmt->execute([$teacherId, $schoolYearId]);
+    $eligibility = $eligStmt->fetchAll();
+
+    $sectionStmt = $pdo->prepare('SELECT id, section_name FROM sections WHERE grade_level_id = ? AND school_year_id = ? AND is_active = 1 ORDER BY section_name');
+
+    $groups = [];
+    foreach ($eligibility as $elig) {
+        $sectionStmt->execute([$elig['grade_level_id'], $schoolYearId]);
+        $sectionRows = [];
+        foreach ($sectionStmt->fetchAll() as $sec) {
+            $sectionRows[] = [
+                'section_id' => (int) $sec['id'],
+                'section_name' => $sec['section_name'],
+                'availability' => claim_availability($pdo, (int) $sec['id'], (int) $elig['subject_id'], $schoolYearId),
+            ];
+        }
+        $groups[] = [
+            'subject_id' => (int) $elig['subject_id'],
+            'subject_name' => $elig['subject_name'],
+            'grade_level' => $elig['grade_level'],
+            'sections' => $sectionRows,
+        ];
+    }
+
+    return $groups;
+}
+
+/**
+ * Turns a full name into a username for admin/import_teachers.php: last word = surname,
+ * everything before it (minus single-letter initials like "V.") = given names, concatenated
+ * + lowercased, joined to the lowercased surname with "_". Falls back to just the first
+ * given-name word if the combined candidate would exceed 20 characters.
+ *
+ * Known, deliberate simplification: a multi-word surname particle ("Dela Cruz", "De Guzman",
+ * "Del Rosario") gets partially absorbed into the given-name blob, since only the literal
+ * last word is treated as the surname. Still produces a unique, working username — just not
+ * a perfectly "correct"-looking surname split. Not worth a fuzzy particle whitelist here.
+ */
+function generate_username(string $fullName): string
+{
+    $words = preg_split('/\s+/u', trim($fullName));
+    $words = array_values(array_filter($words, fn($w) => $w !== ''));
+    if (!$words) {
+        return 'teacher';
+    }
+
+    // Drop trailing generational suffixes (Jr., Sr., II-V) before picking the surname —
+    // otherwise "Pedro Santos Jr." would surname-ify as "jr".
+    $suffixes = ['jr', 'jr.', 'sr', 'sr.', 'ii', 'iii', 'iv', 'v'];
+    while (count($words) > 1 && in_array(mb_strtolower(rtrim(end($words), '.')), $suffixes, true)) {
+        array_pop($words);
+    }
+
+    $clean = fn($w) => mb_strtolower(preg_replace('/[^\p{L}\p{N}]/u', '', $w));
+
+    if (count($words) === 1) {
+        return $clean($words[0]) ?: 'teacher';
+    }
+
+    $surname = $clean(array_pop($words));
+    // Drop single-letter "initial" tokens (e.g. "V." -> "v", length 1 after cleaning).
+    $givenWords = array_values(array_filter($words, fn($w) => mb_strlen($clean($w)) > 1));
+    if (!$givenWords) {
+        // Everything before the surname was initials only (e.g. "J. Reyes") — surname alone,
+        // no leading underscore.
+        return $surname !== '' ? $surname : 'teacher';
+    }
+
+    $allGiven = implode('', array_map($clean, $givenWords));
+    $candidate = $allGiven . '_' . $surname;
+    if (mb_strlen($candidate) > 20) {
+        $candidate = $clean($givenWords[0]) . '_' . $surname;
+    }
+    return $candidate;
+}
+
+/** Appends 2, 3, 4... until unique against both the DB and the rest of this import batch. */
+function resolve_unique_username(PDO $pdo, string $base, array &$usedInBatch): string
+{
+    $existsStmt = $pdo->prepare('SELECT 1 FROM users WHERE username = ?');
+    $candidate = $base;
+    $n = 2;
+    while (true) {
+        if (!isset($usedInBatch[$candidate])) {
+            $existsStmt->execute([$candidate]);
+            if (!$existsStmt->fetchColumn()) {
+                break;
+            }
+        }
+        $candidate = $base . $n;
+        $n++;
+    }
+    $usedInBatch[$candidate] = true;
+    return $candidate;
 }

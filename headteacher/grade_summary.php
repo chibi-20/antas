@@ -73,10 +73,18 @@ if ($sectionId) {
           <tr>
             <td class="px-4 py-2 font-medium whitespace-nowrap sticky left-0 bg-white"><?= h($student['full_name']) ?></td>
             <?php foreach ($data['subjects'] as $subject): ?>
-              <?php $reviewUrl = $subject['sst_id'] ? h(url('/headteacher/review.php?sst_id=' . $subject['sst_id'] . '&term=' . $term . '#student-' . $student['id'])) : null; ?>
+              <?php
+                  // Resolved by the student's own sex — for a sex-split subject (e.g. TLE),
+                  // the review link and Pending badge must point at THIS student's actual
+                  // teacher, not whichever assignment happened to be first/only.
+                  $studentAssignment = subject_assignment_for_student($subject, $student);
+                  $studentStatus = $studentAssignment['status'] ?? $subject['status'];
+                  $studentSstId = $studentAssignment['sst_id'] ?? null;
+                  $reviewUrl = $studentSstId ? h(url('/headteacher/review.php?sst_id=' . $studentSstId . '&term=' . $term . '#student-' . $student['id'])) : null;
+              ?>
               <?php for ($t = 1; $t <= $term; $t++): $g = $data['gradesByTerm'][$t][$student['id']][$subject['subject_id']] ?? null; ?>
                 <td class="px-2 py-2 text-center border-l border-slate-100 <?= $g !== null ? grade_display_class((float) $g) : '' ?>">
-                  <?php if ($t === $term && $subject['status'] !== 'published'): ?>
+                  <?php if ($t === $term && $studentStatus !== 'published'): ?>
                     <span class="text-xs text-amber-500">Pending</span>
                   <?php elseif ($g === null): ?>
                     <span class="text-slate-300">—</span>

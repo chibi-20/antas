@@ -49,17 +49,25 @@ $bandRanges = array_combine($bandLabels, array_column(PL_BANDS, 'range'));
 $perSection = [];
 $perGradeLevel = [];
 if ($subjectId && in_array($subjectId, $supervisedSubjectIds, true)) {
+    // A subject can have more than one sst row per section now (a different teacher each
+    // term, or split by sex — see db/migrations/0011_scoped_teacher_assignments.sql). Without
+    // the term_scope/sex_scope predicates on the students join, every student in the section
+    // would be joined to every matching sst row — double-counting a student when both an M
+    // and F row are published for a term, or counting a student against a grade their own
+    // (still-unpublished) teacher hasn't produced.
     $stmt = $pdo->prepare('SELECT sec.id AS section_id, sec.section_name, gl.id AS grade_level_id, gl.name AS grade_level, gl.sort_order,
             st.id AS student_id, st.sex, tg.transmuted_grade
         FROM section_subject_teachers sst
         JOIN sections sec ON sec.id = sst.section_id
         JOIN grade_levels gl ON gl.id = sec.grade_level_id
         JOIN students st ON st.section_id = sec.id AND st.is_active = 1
+            AND (sst.sex_scope = "ALL" OR sst.sex_scope = st.sex)
         JOIN submission_status ss ON ss.section_subject_teacher_id = sst.id AND ss.term = ?
         LEFT JOIN term_grades tg ON tg.student_id = st.id AND tg.subject_id = sst.subject_id AND tg.term = ? AND tg.school_year_id = sst.school_year_id
         WHERE sst.subject_id = ? AND sst.school_year_id = ? AND sst.is_active = 1 AND ss.status = "published"
+          AND (sst.term_scope = 0 OR sst.term_scope = ?)
         ORDER BY gl.sort_order, sec.section_name');
-    $stmt->execute([$term, $term, $subjectId, $year['id']]);
+    $stmt->execute([$term, $term, $subjectId, $year['id'], $term]);
 
     foreach ($stmt->fetchAll() as $row) {
         if ($row['transmuted_grade'] === null) {

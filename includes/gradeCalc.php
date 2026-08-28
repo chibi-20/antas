@@ -107,10 +107,22 @@ function recompute_term_grade(int $studentId, int $subjectId, int $term, int $sc
         return;
     }
 
-    $stmt = $pdo->prepare('SELECT sst.id FROM section_subject_teachers sst
+    // Resolves the ONE section_subject_teachers row that actually covers this specific
+    // student for this specific term (a subject can have more than one row per section now —
+    // e.g. a different teacher each term, or split by sex — see
+    // db/migrations/0011_scoped_teacher_assignments.sql). term_scope=0/sex_scope='ALL' means
+    // "covers everyone/every term"; the WHERE clause alone resolves to exactly one row in
+    // every state the admin-side business rule allows — the ORDER BY is a tiebreaker for a
+    // state that shouldn't occur, not the real safety net.
+    $stmt = $pdo->prepare("SELECT sst.id FROM section_subject_teachers sst
         JOIN students st ON st.section_id = sst.section_id
-        WHERE st.id = ? AND sst.subject_id = ? AND sst.school_year_id = ?');
-    $stmt->execute([$studentId, $subjectId, $schoolYearId]);
+        WHERE st.id = ? AND sst.subject_id = ? AND sst.school_year_id = ?
+          AND sst.is_active = 1
+          AND (sst.term_scope = 0 OR sst.term_scope = ?)
+          AND (sst.sex_scope = 'ALL' OR sst.sex_scope = st.sex)
+        ORDER BY (sst.term_scope <> 0) DESC, (sst.sex_scope <> 'ALL') DESC, sst.id DESC
+        LIMIT 1");
+    $stmt->execute([$studentId, $subjectId, $schoolYearId, $term]);
     $sstId = $stmt->fetchColumn();
     if (!$sstId) {
         return;
@@ -195,7 +207,7 @@ function recompute_compound_term_grade(int $studentId, int $parentSubjectId, int
 function recompute_term_grades_for_assignment(int $sectionSubjectTeacherId, int $term): void
 {
     $pdo = db();
-    $stmt = $pdo->prepare('SELECT subject_id, school_year_id, section_id FROM section_subject_teachers WHERE id = ?');
+    $stmt = $pdo->prepare('SELECT subject_id, school_year_id, section_id, sex_scope FROM section_subject_teachers WHERE id = ?');
     $stmt->execute([$sectionSubjectTeacherId]);
     $sst = $stmt->fetch();
     if (!$sst) {
@@ -206,8 +218,10 @@ function recompute_term_grades_for_assignment(int $sectionSubjectTeacherId, int 
     $parentStmt->execute([$sst['subject_id']]);
     $parentSubjectId = $parentStmt->fetchColumn();
 
-    $students = $pdo->prepare('SELECT id FROM students WHERE section_id = ? AND is_active = 1');
-    $students->execute([$sst['section_id']]);
+    // Only the students this specific assignment actually covers — e.g. a boys-only TLE
+    // teacher's save must not touch girls' grades, even though they share a section_id.
+    $students = $pdo->prepare("SELECT id FROM students WHERE section_id = ? AND is_active = 1 AND (? = 'ALL' OR sex = ?)");
+    $students->execute([$sst['section_id'], $sst['sex_scope'], $sst['sex_scope']]);
     foreach ($students->fetchAll(PDO::FETCH_COLUMN) as $studentId) {
         recompute_term_grade((int) $studentId, (int) $sst['subject_id'], $term, (int) $sst['school_year_id']);
         if ($parentSubjectId) {

@@ -33,7 +33,9 @@ fputcsv($out, $header);
 foreach ($data['students'] as $student) {
     $row = [$student['lrn'], $student['full_name']];
     foreach ($data['subjects'] as $subject) {
-        if ($subject['status'] !== 'published') {
+        $studentAssignment = subject_assignment_for_student($subject, $student);
+        $studentStatus = $studentAssignment['status'] ?? $subject['status'];
+        if ($studentStatus !== 'published') {
             $row[] = 'Pending';
         } else {
             $row[] = $data['grades'][$student['id']][$subject['subject_id']] ?? '';

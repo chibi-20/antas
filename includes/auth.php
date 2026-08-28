@@ -47,7 +47,7 @@ function current_user(): ?array
 
 function attempt_login(string $username, string $password): bool
 {
-    $stmt = db()->prepare('SELECT id, full_name, username, password_hash, role FROM users WHERE username = ? AND is_active = 1');
+    $stmt = db()->prepare('SELECT id, full_name, username, password_hash, role, must_change_password FROM users WHERE username = ? AND is_active = 1');
     $stmt->execute([$username]);
     $user = $stmt->fetch();
 
@@ -62,6 +62,7 @@ function attempt_login(string $username, string $password): bool
         'full_name' => $user['full_name'],
         'username' => $user['username'],
         'role' => $user['role'],
+        'must_change_password' => (bool) $user['must_change_password'],
     ];
     return true;
 }
@@ -78,6 +79,13 @@ function require_login(): array
     $user = current_user();
     if (!$user) {
         redirect('/login.php?redirect=' . urlencode($_SERVER['REQUEST_URI'] ?? '/'));
+    }
+    // Bulk-imported accounts (admin/import_teachers.php) all start with the same
+    // publicly-known default password — this closes that window by blocking every other
+    // page until the teacher sets their own. change_password.php is exempted from its own
+    // gate via this basename check, so it can't create a redirect loop.
+    if (!empty($user['must_change_password']) && basename($_SERVER['SCRIPT_NAME']) !== 'change_password.php') {
+        redirect('/change_password.php');
     }
     return $user;
 }
@@ -187,6 +195,39 @@ function require_own_assignment(int $sectionSubjectTeacherId): array
         forbidden('This is not your class.');
     }
     return $assignment;
+}
+
+/**
+ * Blocks access to a term this specific assignment doesn't actually cover (term_scope=0
+ * means "covers every term", so it always passes). Without this, a teacher whose assignment
+ * only covers e.g. Term 2 could open ?term=1 for their own sst_id: submission_status has no
+ * row there (it belongs to a different teacher's sst row for that term), so $editable
+ * computes true, the auto-template fires, and the teacher can enter a whole term of scores
+ * that never surface anywhere — recompute_term_grade()'s resolution correctly finds no
+ * matching sst for that student/term and silently does nothing with them.
+ */
+function assert_covers_term(array $assignment, int $term): void
+{
+    $termScope = (int) $assignment['term_scope'];
+    if ($termScope !== 0 && $termScope !== $term) {
+        forbidden("This assignment doesn't cover Term $term.");
+    }
+}
+
+/**
+ * Self-claim guard: verifies the current teacher has an active claim_eligibility row
+ * covering (subjectId, gradeLevelId) for this school year. The caller MUST resolve
+ * gradeLevelId itself from the sections table by sectionId server-side — never trust a
+ * posted grade_level_id, since section_id/subject_id arrive as ordinary POST fields.
+ */
+function assert_claim_eligible(int $teacherId, int $subjectId, int $gradeLevelId, int $schoolYearId): void
+{
+    $stmt = db()->prepare('SELECT 1 FROM claim_eligibility
+        WHERE teacher_id = ? AND subject_id = ? AND grade_level_id = ? AND school_year_id = ? AND is_active = 1 LIMIT 1');
+    $stmt->execute([$teacherId, $subjectId, $gradeLevelId, $schoolYearId]);
+    if (!$stmt->fetchColumn()) {
+        forbidden('You are not eligible to self-claim this subject for this grade level.');
+    }
 }
 
 /** Blocks score edits once a term has been submitted for review or published. */

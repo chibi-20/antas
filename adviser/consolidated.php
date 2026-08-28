@@ -87,9 +87,18 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
       <tr>
         <td class="px-4 py-2 font-medium whitespace-nowrap sticky left-0 bg-white"><?= h($student['full_name']) ?></td>
         <?php foreach ($data['subjects'] as $subject): ?>
+          <?php
+              // A sex-split subject (e.g. one teacher for boys' TLE, another for girls') can
+              // be published for this student's half and still pending for the other — the
+              // Pending badge must reflect THIS student's own assignment, not the subject as
+              // a whole. Falls back to the subject-level aggregate for a compound parent
+              // (which has no assignments of its own).
+              $studentAssignment = subject_assignment_for_student($subject, $student);
+              $studentStatus = $studentAssignment['status'] ?? $subject['status'];
+          ?>
           <?php for ($t = 1; $t <= $term; $t++): $g = grade_whole($data['gradesByTerm'][$t][$student['id']][$subject['subject_id']] ?? null); ?>
             <td class="px-2 py-2 text-center border-l border-slate-100 <?= $g !== null ? grade_display_class((float) $g) : '' ?>">
-              <?php if ($t === $term && $subject['status'] !== 'published'): ?>
+              <?php if ($t === $term && $studentStatus !== 'published'): ?>
                 <span class="text-xs text-amber-500">Pending</span>
               <?php elseif ($g === null): ?>
                 <span class="text-slate-300">—</span>

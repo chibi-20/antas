@@ -53,11 +53,15 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
       </thead>
       <tbody>
         <?php foreach ($data['subjects'] as $subject): ?>
+        <?php
+            $studentAssignment = subject_assignment_for_student($subject, $student);
+            $studentStatus = $studentAssignment['status'] ?? $subject['status'];
+        ?>
         <tr>
           <td class="<?= $subject['is_child'] ? 'italic pl-3' : '' ?>"><?= h($subject['subject_name']) ?></td>
           <?php for ($t = 1; $t <= $term; $t++): $g = grade_whole($data['gradesByTerm'][$t][$student['id']][$subject['subject_id']] ?? null); ?>
           <td class="<?= $g !== null ? grade_display_class((float) $g) : '' ?>">
-            <?php if ($t === $term && $subject['status'] !== 'published'): ?>
+            <?php if ($t === $term && $studentStatus !== 'published'): ?>
               <span class="pending">Pending</span>
             <?php elseif ($g === null): ?>
               —

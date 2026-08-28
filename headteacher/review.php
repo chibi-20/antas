@@ -26,6 +26,7 @@ if (!$assignment) {
     forbidden('Assignment not found.');
 }
 require_supervised_subject((int) $assignment['subject_id'], (int) $assignment['school_year_id']);
+assert_covers_term($assignment, $term);
 
 $statusStmt = $pdo->prepare('SELECT * FROM submission_status WHERE section_subject_teacher_id = ? AND term = ?');
 $statusStmt->execute([$sstId, $term]);
@@ -88,10 +89,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // treats 'returned_for_revision' as editable, no changes needed there.
             $pdo->prepare("UPDATE submission_status SET status = 'returned_for_revision', reviewed_by = ?, reviewed_at = NOW(), revision_comment = ? WHERE section_subject_teacher_id = ? AND term = ?")
                 ->execute([$user['id'], 'Edit request approved — ' . $er['reason'], $sstId, $term]);
-            // Snapshot every active student's CURRENT grade as the "old" value for this
-            // request's history — the "new" value gets filled in once republished, above.
-            $studentsStmt = $pdo->prepare('SELECT id FROM students WHERE section_id = ? AND is_active = 1');
-            $studentsStmt->execute([$assignment['section_id']]);
+            // Snapshot every student THIS assignment covers (respecting sex_scope — approving
+            // the boys' teacher's request must never snapshot/diff the girls' grades) as the
+            // "old" value for this request's history — "new" gets filled in once republished.
+            $studentsStmt = $pdo->prepare("SELECT id FROM students WHERE section_id = ? AND is_active = 1 AND (? = 'ALL' OR sex = ?)");
+            $studentsStmt->execute([$assignment['section_id'], $assignment['sex_scope'], $assignment['sex_scope']]);
             $oldGradeStmt = $pdo->prepare('SELECT transmuted_grade FROM term_grades WHERE student_id = ? AND subject_id = ? AND term = ?');
             $insertHistory = $pdo->prepare('INSERT INTO grade_edit_history (edit_request_id, student_id, old_transmuted_grade) VALUES (?, ?, ?)');
             foreach ($studentsStmt->fetchAll(PDO::FETCH_COLUMN) as $studentId) {
@@ -132,8 +134,9 @@ foreach ($items as $item) {
 }
 
 // Male-then-Female, alphabetical within each — the standard class record roster order.
-$students = $pdo->prepare("SELECT * FROM students WHERE section_id = ? AND is_active = 1 ORDER BY FIELD(sex, 'M', 'F'), full_name");
-$students->execute([$assignment['section_id']]);
+// Restricted to this assignment's sex_scope, same as teacher/class_record.php.
+$students = $pdo->prepare("SELECT * FROM students WHERE section_id = ? AND is_active = 1 AND (? = 'ALL' OR sex = ?) ORDER BY FIELD(sex, 'M', 'F'), full_name");
+$students->execute([$assignment['section_id'], $assignment['sex_scope'], $assignment['sex_scope']]);
 $students = $students->fetchAll();
 
 $scoreLookup = [];

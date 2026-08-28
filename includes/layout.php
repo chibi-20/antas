@@ -110,6 +110,12 @@ function nav_items(array $user): array
     $items = ['My Classes' => 'teacher/index.php'];
     $pdo = db();
 
+    $claimStmt = $pdo->prepare('SELECT 1 FROM claim_eligibility WHERE teacher_id = ? AND is_active = 1 LIMIT 1');
+    $claimStmt->execute([$user['id']]);
+    if ($claimStmt->fetchColumn()) {
+        $items['Claim a Class'] = 'teacher/claim.php';
+    }
+
     $htStmt = $pdo->prepare('SELECT 1 FROM head_teacher_assignments WHERE head_teacher_id = ? AND is_active = 1 LIMIT 1');
     $htStmt->execute([$user['id']]);
     if ($htStmt->fetchColumn()) {

@@ -17,6 +17,7 @@ $reason = trim((string) ($_POST['reason'] ?? ''));
 // validated as belonging to the current user), not the user themselves — its own teacher_id
 // is the correct id to attribute this request to.
 $assignment = require_own_assignment($sstId);
+assert_covers_term($assignment, $term);
 
 $pdo = db();
 $stmt = $pdo->prepare('SELECT status FROM submission_status WHERE section_subject_teacher_id = ? AND term = ?');

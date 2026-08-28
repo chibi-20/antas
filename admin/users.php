@@ -80,7 +80,10 @@ if (isset($_GET['edit'])) {
 render_header('Users');
 ?>
 <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6 mb-6 max-w-lg">
-  <h2 class="text-sm font-semibold text-slate-600 mb-4"><?= $editing ? 'Edit User' : 'Add User' ?></h2>
+  <div class="flex items-center justify-between mb-4">
+    <h2 class="text-sm font-semibold text-slate-600"><?= $editing ? 'Edit User' : 'Add User' ?></h2>
+    <a href="<?= h(url('/admin/import_teachers.php')) ?>" class="px-3 py-1.5 rounded-lg text-sm bg-slate-100 text-slate-600 hover:bg-slate-200">Import Teachers</a>
+  </div>
   <form method="post">
     <?= csrf_field() ?>
     <input type="hidden" name="action" value="<?= $editing ? 'update' : 'create' ?>">

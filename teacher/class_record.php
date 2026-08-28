@@ -12,6 +12,7 @@ if ($term < 1 || $term > 3) {
 }
 
 $assignment = require_own_assignment($sstId);
+assert_covers_term($assignment, $term);
 $pdo = db();
 
 $statusStmt = $pdo->prepare('SELECT * FROM submission_status WHERE section_subject_teacher_id = ? AND term = ?');
@@ -147,8 +148,10 @@ foreach (['WW', 'PT', 'EX'] as $type) {
 }
 
 // Male-then-Female, alphabetical within each — the standard class record roster order.
-$students = $pdo->prepare("SELECT * FROM students WHERE section_id = ? AND is_active = 1 ORDER BY FIELD(sex, 'M', 'F'), full_name");
-$students->execute([$assignment['section_id']]);
+// Restricted to this assignment's sex_scope (e.g. a boys-only TLE assignment never shows
+// girls, even though they share a section_id).
+$students = $pdo->prepare("SELECT * FROM students WHERE section_id = ? AND is_active = 1 AND (? = 'ALL' OR sex = ?) ORDER BY FIELD(sex, 'M', 'F'), full_name");
+$students->execute([$assignment['section_id'], $assignment['sex_scope'], $assignment['sex_scope']]);
 $students = $students->fetchAll();
 
 $scoreLookup = [];

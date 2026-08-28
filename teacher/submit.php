@@ -12,7 +12,8 @@ csrf_verify();
 $sstId = (int) ($_POST['sst_id'] ?? 0);
 $term = (int) ($_POST['term'] ?? 0);
 
-require_own_assignment($sstId);
+$assignment = require_own_assignment($sstId);
+assert_covers_term($assignment, $term);
 
 $pdo = db();
 $stmt = $pdo->prepare('SELECT status FROM submission_status WHERE section_subject_teacher_id = ? AND term = ?');
