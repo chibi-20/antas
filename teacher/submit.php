@@ -13,7 +13,8 @@ $sstId = (int) ($_POST['sst_id'] ?? 0);
 $term = (int) ($_POST['term'] ?? 0);
 
 $assignment = require_own_assignment($sstId);
-assert_covers_term($assignment, $term);
+assert_covers_term($assignment, $term, '/teacher/index.php',
+    "You don't teach {$assignment['subject_name']} for {$assignment['grade_level']} - {$assignment['section_name']} in Term $term — here are your classes.");
 
 $pdo = db();
 $stmt = $pdo->prepare('SELECT status FROM submission_status WHERE section_subject_teacher_id = ? AND term = ?');

@@ -205,11 +205,21 @@ function require_own_assignment(int $sectionSubjectTeacherId): array
  * computes true, the auto-template fires, and the teacher can enter a whole term of scores
  * that never surface anywhere — recompute_term_grade()'s resolution correctly finds no
  * matching sst for that student/term and silently does nothing with them.
+ * A real, expected way to land here: a stale bookmark/link to a specific term, or a
+ * scoped (e.g. TLE) teacher's assignment being reassigned to a different term after they'd
+ * already opened it. Since that's routine rather than exceptional, callers should pass
+ * $redirectTo (+ an optional friendlier $message) to land the user somewhere useful with an
+ * explanation instead of a dead-end 403 — the plain forbidden() fallback below only fires for
+ * a caller that didn't opt into that.
  */
-function assert_covers_term(array $assignment, int $term): void
+function assert_covers_term(array $assignment, int $term, ?string $redirectTo = null, ?string $message = null): void
 {
     $termScope = (int) $assignment['term_scope'];
     if ($termScope !== 0 && $termScope !== $term) {
+        if ($redirectTo !== null) {
+            flash_set('error', $message ?? "This assignment doesn't cover Term $term.");
+            redirect($redirectTo);
+        }
         forbidden("This assignment doesn't cover Term $term.");
     }
 }

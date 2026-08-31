@@ -26,7 +26,8 @@ if (!$assignment) {
     forbidden('Assignment not found.');
 }
 require_supervised_subject((int) $assignment['subject_id'], (int) $assignment['school_year_id']);
-assert_covers_term($assignment, $term);
+assert_covers_term($assignment, $term, '/headteacher/dashboard.php',
+    "{$assignment['teacher_name']}'s {$assignment['subject_name']} assignment for {$assignment['grade_level']} - {$assignment['section_name']} doesn't cover Term $term.");
 
 $statusStmt = $pdo->prepare('SELECT * FROM submission_status WHERE section_subject_teacher_id = ? AND term = ?');
 $statusStmt->execute([$sstId, $term]);

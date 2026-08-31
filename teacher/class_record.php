@@ -12,7 +12,8 @@ if ($term < 1 || $term > 3) {
 }
 
 $assignment = require_own_assignment($sstId);
-assert_covers_term($assignment, $term);
+assert_covers_term($assignment, $term, '/teacher/index.php',
+    "You don't teach {$assignment['subject_name']} for {$assignment['grade_level']} - {$assignment['section_name']} in Term $term — here are your classes.");
 $pdo = db();
 
 $statusStmt = $pdo->prepare('SELECT * FROM submission_status WHERE section_subject_teacher_id = ? AND term = ?');
