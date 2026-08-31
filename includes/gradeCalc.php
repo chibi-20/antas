@@ -220,8 +220,35 @@ function recompute_term_grades_for_assignment(int $sectionSubjectTeacherId, int 
 
     // Only the students this specific assignment actually covers — e.g. a boys-only TLE
     // teacher's save must not touch girls' grades, even though they share a section_id.
-    $students = $pdo->prepare("SELECT id FROM students WHERE section_id = ? AND is_active = 1 AND (? = 'ALL' OR sex = ?)");
-    $students->execute([$sst['section_id'], $sst['sex_scope'], $sst['sex_scope']]);
+   // Only recompute students covered by this assignment.
+$sexScope = strtoupper(trim((string) ($sst['sex_scope'] ?? 'ALL')));
+
+if ($sexScope === 'ALL') {
+    $students = $pdo->prepare('
+        SELECT id
+        FROM students
+        WHERE section_id = ?
+          AND is_active = 1
+    ');
+
+    $students->execute([
+        $sst['section_id'],
+    ]);
+} else {
+    $students = $pdo->prepare('
+        SELECT id
+        FROM students
+        WHERE section_id = ?
+          AND is_active = 1
+          AND sex = ?
+    ');
+
+    $students->execute([
+        $sst['section_id'],
+        $sexScope,
+    ]);
+}
+
     foreach ($students->fetchAll(PDO::FETCH_COLUMN) as $studentId) {
         recompute_term_grade((int) $studentId, (int) $sst['subject_id'], $term, (int) $sst['school_year_id']);
         if ($parentSubjectId) {
