@@ -319,7 +319,24 @@ function get_consolidated_data(int $sectionId, int $schoolYearId, int $term): ar
     $childSubjectIds = array_values(array_map(fn($s) => (int) $s['subject_id'], array_filter($subjects, fn($s) => $s['is_child'])));
     if ($childSubjectIds) {
         $childPlaceholders = implode(',', array_fill(0, count($childSubjectIds), '?'));
+        // UNION ALL of two plain queries rather than "(sst.sex_scope = 'ALL' OR sst.sex_scope
+        // = st.sex)" — that shape (a literal-string comparison OR'd with a column comparison
+        // in one expression) can throw "Illegal mix of collations" on some MySQL versions even
+        // when every column's stored collation genuinely matches (see
+        // db/fix_sex_scope_collation.php). The two branches are mutually exclusive by
+        // definition (sex_scope can't be both 'ALL' and a specific sex on the same row), so
+        // UNION ALL needs no de-duplication.
         $stmt = $pdo->prepare("SELECT tg.student_id, tg.term, tg.subject_id, tg.transmuted_grade
+            FROM term_grades tg
+            JOIN section_subject_teachers sst ON sst.subject_id = tg.subject_id AND sst.school_year_id = tg.school_year_id
+            JOIN submission_status ss ON ss.section_subject_teacher_id = sst.id AND ss.term = tg.term
+            WHERE ss.status = 'published' AND sst.section_id = ? AND tg.school_year_id = ?
+              AND sst.is_active = 1
+              AND (sst.term_scope = 0 OR sst.term_scope = tg.term)
+              AND sst.sex_scope = 'ALL'
+              AND tg.term IN ($termsPlaceholders) AND tg.subject_id IN ($childPlaceholders)
+            UNION ALL
+            SELECT tg.student_id, tg.term, tg.subject_id, tg.transmuted_grade
             FROM term_grades tg
             JOIN students st ON st.id = tg.student_id
             JOIN section_subject_teachers sst ON sst.subject_id = tg.subject_id AND sst.school_year_id = tg.school_year_id
@@ -327,9 +344,10 @@ function get_consolidated_data(int $sectionId, int $schoolYearId, int $term): ar
             WHERE ss.status = 'published' AND sst.section_id = ? AND tg.school_year_id = ?
               AND sst.is_active = 1
               AND (sst.term_scope = 0 OR sst.term_scope = tg.term)
-              AND (sst.sex_scope = 'ALL' OR sst.sex_scope = st.sex)
+              AND sst.sex_scope = st.sex
               AND tg.term IN ($termsPlaceholders) AND tg.subject_id IN ($childPlaceholders)");
-        $stmt->execute(array_merge([$sectionId, $schoolYearId], range(1, $term), $childSubjectIds));
+        $branchParams = array_merge([$sectionId, $schoolYearId], range(1, $term), $childSubjectIds);
+        $stmt->execute(array_merge($branchParams, $branchParams));
         foreach ($stmt->fetchAll() as $row) {
             $gradesByTerm[(int) $row['term']][(int) $row['student_id']][(int) $row['subject_id']] = $row['transmuted_grade'];
         }

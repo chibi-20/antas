@@ -111,19 +111,45 @@ function recompute_term_grade(int $studentId, int $subjectId, int $term, int $sc
     // student for this specific term (a subject can have more than one row per section now —
     // e.g. a different teacher each term, or split by sex — see
     // db/migrations/0011_scoped_teacher_assignments.sql). term_scope=0/sex_scope='ALL' means
-    // "covers everyone/every term"; the WHERE clause alone resolves to exactly one row in
-    // every state the admin-side business rule allows — the ORDER BY is a tiebreaker for a
-    // state that shouldn't occur, not the real safety net.
+    // "covers everyone/every term". Split into two queries (ALL first, specific sex as
+    // fallback) rather than "(sst.sex_scope = 'ALL' OR sst.sex_scope = st.sex)" — that shape
+    // (a literal-string comparison OR'd with a column comparison) can throw "Illegal mix of
+    // collations" on some MySQL versions even when every column's stored collation genuinely
+    // matches (see db/fix_sex_scope_collation.php). term_scope is numeric, so it's unaffected
+    // and stays a plain OR in both queries. The business rule guarantees these two cases never
+    // both match for the same student/term, so trying ALL first and falling back to the
+    // student's actual sex is equivalent to the original single-query resolution — the
+    // original's ORDER BY was already just a tiebreaker for a state that shouldn't occur, not
+    // the real safety net.
     $stmt = $pdo->prepare("SELECT sst.id FROM section_subject_teachers sst
         JOIN students st ON st.section_id = sst.section_id
         WHERE st.id = ? AND sst.subject_id = ? AND sst.school_year_id = ?
           AND sst.is_active = 1
           AND (sst.term_scope = 0 OR sst.term_scope = ?)
-          AND (sst.sex_scope = 'ALL' OR sst.sex_scope = st.sex)
-        ORDER BY (sst.term_scope <> 0) DESC, (sst.sex_scope <> 'ALL') DESC, sst.id DESC
+          AND sst.sex_scope = 'ALL'
+        ORDER BY (sst.term_scope <> 0) DESC, sst.id DESC
         LIMIT 1");
     $stmt->execute([$studentId, $subjectId, $schoolYearId, $term]);
     $sstId = $stmt->fetchColumn();
+
+    if (!$sstId) {
+        $sexStmt = $pdo->prepare('SELECT sex FROM students WHERE id = ?');
+        $sexStmt->execute([$studentId]);
+        $studentSex = $sexStmt->fetchColumn();
+        if ($studentSex) {
+            $stmt = $pdo->prepare("SELECT sst.id FROM section_subject_teachers sst
+                WHERE sst.section_id = (SELECT section_id FROM students WHERE id = ?)
+                  AND sst.subject_id = ? AND sst.school_year_id = ?
+                  AND sst.is_active = 1
+                  AND (sst.term_scope = 0 OR sst.term_scope = ?)
+                  AND sst.sex_scope = ?
+                ORDER BY (sst.term_scope <> 0) DESC, sst.id DESC
+                LIMIT 1");
+            $stmt->execute([$studentId, $subjectId, $schoolYearId, $term, $studentSex]);
+            $sstId = $stmt->fetchColumn();
+        }
+    }
+
     if (!$sstId) {
         return;
     }

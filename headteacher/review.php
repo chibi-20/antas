@@ -93,8 +93,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Snapshot every student THIS assignment covers (respecting sex_scope — approving
             // the boys' teacher's request must never snapshot/diff the girls' grades) as the
             // "old" value for this request's history — "new" gets filled in once republished.
-            $studentsStmt = $pdo->prepare("SELECT id FROM students WHERE section_id = ? AND is_active = 1 AND (? = 'ALL' OR sex = ?)");
-            $studentsStmt->execute([$assignment['section_id'], $assignment['sex_scope'], $assignment['sex_scope']]);
+            // Split into two plain queries rather than "(? = 'ALL' OR sex = ?)" — that shape
+            // (a literal-string comparison OR'd with a column comparison in one expression)
+            // can throw "Illegal mix of collations" on some MySQL versions even when every
+            // column's stored collation genuinely matches (see db/fix_sex_scope_collation.php).
+            $sexScopeForSnapshot = strtoupper(trim((string) ($assignment['sex_scope'] ?? 'ALL')));
+            if ($sexScopeForSnapshot === 'ALL') {
+                $studentsStmt = $pdo->prepare('SELECT id FROM students WHERE section_id = ? AND is_active = 1');
+                $studentsStmt->execute([$assignment['section_id']]);
+            } else {
+                $studentsStmt = $pdo->prepare('SELECT id FROM students WHERE section_id = ? AND is_active = 1 AND sex = ?');
+                $studentsStmt->execute([$assignment['section_id'], $sexScopeForSnapshot]);
+            }
             $oldGradeStmt = $pdo->prepare('SELECT transmuted_grade FROM term_grades WHERE student_id = ? AND subject_id = ? AND term = ?');
             $insertHistory = $pdo->prepare('INSERT INTO grade_edit_history (edit_request_id, student_id, old_transmuted_grade) VALUES (?, ?, ?)');
             foreach ($studentsStmt->fetchAll(PDO::FETCH_COLUMN) as $studentId) {
@@ -135,9 +145,16 @@ foreach ($items as $item) {
 }
 
 // Male-then-Female, alphabetical within each — the standard class record roster order.
-// Restricted to this assignment's sex_scope, same as teacher/class_record.php.
-$students = $pdo->prepare("SELECT * FROM students WHERE section_id = ? AND is_active = 1 AND (? = 'ALL' OR sex = ?) ORDER BY FIELD(sex, 'M', 'F'), full_name");
-$students->execute([$assignment['section_id'], $assignment['sex_scope'], $assignment['sex_scope']]);
+// Restricted to this assignment's sex_scope, same as teacher/class_record.php. Split into two
+// plain queries rather than "(? = 'ALL' OR sex = ?)" — see the matching comment above.
+$sexScope = strtoupper(trim((string) ($assignment['sex_scope'] ?? 'ALL')));
+if ($sexScope === 'ALL') {
+    $students = $pdo->prepare("SELECT * FROM students WHERE section_id = ? AND is_active = 1 ORDER BY FIELD(sex, 'M', 'F'), full_name");
+    $students->execute([$assignment['section_id']]);
+} else {
+    $students = $pdo->prepare("SELECT * FROM students WHERE section_id = ? AND is_active = 1 AND sex = ? ORDER BY FIELD(sex, 'M', 'F'), full_name");
+    $students->execute([$assignment['section_id'], $sexScope]);
+}
 $students = $students->fetchAll();
 
 $scoreLookup = [];
