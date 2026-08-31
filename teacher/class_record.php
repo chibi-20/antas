@@ -193,9 +193,37 @@ foreach (['WW', 'PT', 'EX'] as $type) {
 // Male-then-Female, alphabetical within each — the standard class record roster order.
 // Restricted to this assignment's sex_scope (e.g. a boys-only TLE assignment never shows
 // girls, even though they share a section_id).
-$students = $pdo->prepare("SELECT * FROM students WHERE section_id = ? AND is_active = 1 AND (? = 'ALL' OR sex = ?) ORDER BY FIELD(sex, 'M', 'F'), full_name");
-$students->execute([$assignment['section_id'], $assignment['sex_scope'], $assignment['sex_scope']]);
-$students = $students->fetchAll();
+$sexScope = strtoupper(trim((string) ($assignment['sex_scope'] ?? 'ALL')));
+
+if ($sexScope === 'ALL') {
+    $studentsStmt = $pdo->prepare("
+        SELECT *
+        FROM students
+        WHERE section_id = ?
+          AND is_active = 1
+        ORDER BY FIELD(sex, 'M', 'F'), full_name
+    ");
+
+    $studentsStmt->execute([
+        $assignment['section_id'],
+    ]);
+} else {
+    $studentsStmt = $pdo->prepare("
+        SELECT *
+        FROM students
+        WHERE section_id = ?
+          AND is_active = 1
+          AND sex = ?
+        ORDER BY FIELD(sex, 'M', 'F'), full_name
+    ");
+
+    $studentsStmt->execute([
+        $assignment['section_id'],
+        $sexScope,
+    ]);
+}
+
+$students = $studentsStmt->fetchAll();
 
 $scoreLookup = [];
 if ($items) {
