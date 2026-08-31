@@ -422,9 +422,10 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
           <?php foreach (['WW', 'PT', 'EX'] as $type): ?>
             <?php foreach ($itemsByType[$type] as $item): ?>
               <td class="px-3 py-2 text-center">
+                <?php $rawScore = $scoreLookup[$item['id']][$student['id']] ?? null; ?>
                 <input type="number" step="1" min="0" max="<?= h($item['highest_possible_score']) ?>"
                   name="scores[<?= (int) $item['id'] ?>][<?= (int) $student['id'] ?>]"
-                  value="<?= h($scoreLookup[$item['id']][$student['id']] ?? '') ?>"
+                  value="<?= $rawScore !== null ? (int) round((float) $rawScore) : '' ?>"
                   data-row="<?= $rowIndex ?>" data-col="<?= $itemColumns[$item['id']] ?>" data-item-id="<?= (int) $item['id'] ?>"
                   <?= $editable ? '' : 'disabled' ?>
                   class="js-grade-cell w-16 px-2 py-1 border border-slate-300 rounded text-center disabled:bg-slate-50 disabled:text-slate-400 focus:border-accent-500 focus:ring-1 focus:ring-accent-500">
@@ -477,6 +478,7 @@ window.addEventListener('DOMContentLoaded', function () {
     students: <?= json_encode(array_map(fn($s) => (int) $s['id'], $students)) ?>
   });
   initPasteGrid();
+  initGridArrowNav();
 });
 </script>
 <?php endif; ?>

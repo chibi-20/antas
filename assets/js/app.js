@@ -345,3 +345,72 @@ function initPasteGrid() {
     });
   });
 }
+
+/**
+ * Arrow-key navigation between score cells (class_record.php), Excel/Sheets-style — Tab
+ * already moves left-to-right, but there was no way to move up/down without reaching for the
+ * mouse. Reuses the same data-row/data-col lookup initPasteGrid() already relies on.
+ *
+ * Up/Down always jump — there's no competing native behavior worth preserving on a single
+ * -line number field. Left/Right only jump once the cursor is already at the very start/end
+ * of the field, so mid-edit cursor movement (fixing one digit of a 2-digit score) still works
+ * normally; selectionStart/End aren't readable on type="number" in every browser, so that
+ * check fails open (treated as "at the edge") wherever it isn't supported, rather than
+ * trapping the cursor in a cell it can't detect the position in.
+ */
+function initGridArrowNav() {
+  function cellAt(row, col) {
+    return document.querySelector('.js-grade-cell[data-row="' + row + '"][data-col="' + col + '"]');
+  }
+
+  // type="number" doesn't support selection APIs — some browsers throw on access, others
+  // (Chrome) just return null for selectionStart/End without throwing at all. Either way,
+  // treat "position unknown" as "at the edge" so the jump is never silently blocked.
+  function caretAtStart(input) {
+    try {
+      var s = input.selectionStart, e = input.selectionEnd;
+      if (s === null || e === null) return true;
+      return s === 0 && e === 0;
+    } catch (err) {
+      return true;
+    }
+  }
+
+  function caretAtEnd(input) {
+    try {
+      var s = input.selectionStart, e = input.selectionEnd;
+      if (s === null || e === null) return true;
+      return s === input.value.length && e === input.value.length;
+    } catch (err) {
+      return true;
+    }
+  }
+
+  document.querySelectorAll('.js-grade-cell').forEach(function (input) {
+    input.addEventListener('keydown', function (e) {
+      var row = parseInt(input.dataset.row, 10);
+      var col = parseInt(input.dataset.col, 10);
+      var target = null;
+
+      if (e.key === 'ArrowUp') {
+        target = cellAt(row - 1, col);
+      } else if (e.key === 'ArrowDown') {
+        target = cellAt(row + 1, col);
+      } else if (e.key === 'ArrowLeft') {
+        if (!caretAtStart(input)) return;
+        target = cellAt(row, col - 1);
+      } else if (e.key === 'ArrowRight') {
+        if (!caretAtEnd(input)) return;
+        target = cellAt(row, col + 1);
+      } else {
+        return;
+      }
+
+      if (target && !target.disabled) {
+        e.preventDefault();
+        target.focus();
+        target.select();
+      }
+    });
+  });
+}
