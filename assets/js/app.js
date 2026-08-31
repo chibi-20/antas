@@ -286,6 +286,27 @@ function initGradePreview(config) {
       }
     });
   });
+
+  // The "Highest score" header field (item_highest[id]) is editable inline in the same grid,
+  // but score cells only got their max= attribute once, at page load — editing this field
+  // never used to update it. That let a teacher raise a highest score, enter a score that's
+  // valid under the NEW value, and have the browser's own stale max= silently block the
+  // whole Save Scores submission (both the new highest AND the new scores lost, no error
+  // shown beyond the browser's native "value must be less than or equal to N" tooltip). Keep
+  // max= (and this preview's own copy of item.highest) in sync live as the teacher types.
+  items.forEach(function (item) {
+    var highestInput = document.querySelector('input[name="item_highest[' + item.id + ']"]');
+    if (!highestInput) return;
+    highestInput.addEventListener('input', function () {
+      var val = parseFloat(highestInput.value);
+      if (isNaN(val) || val <= 0) return;
+      item.highest = val;
+      document.querySelectorAll('.js-grade-cell[data-item-id="' + item.id + '"]').forEach(function (cell) {
+        cell.max = val;
+      });
+      students.forEach(function (studentId) { recalcStudent(studentId); });
+    });
+  });
 }
 
 /**

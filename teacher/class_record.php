@@ -68,7 +68,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } elseif ($action === 'save_scores') {
         // Column headers (name + highest score) are edited inline in the same grid/form —
-        // save any changes before scores, since recompute below reads them fresh either way.
+        // save any changes before scores, since scores are validated below against the fresh
+        // highest_possible_score, not whatever the browser's max= was at page load (that's
+        // client-side only and can go stale the moment a teacher edits it in the same visit —
+        // see assets/js/app.js's initGradePreview for the matching client-side fix).
         $itemNames = $_POST['item_name'] ?? [];
         $itemHighest = $_POST['item_highest'] ?? [];
         if ($itemNames) {
@@ -82,22 +85,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
+        // Authoritative bounds for the validation below — fetched fresh, after the update
+        // above, so a highest-score change in this same submission is respected immediately.
+        $currentItems = $pdo->prepare('SELECT id, item_name, highest_possible_score FROM assessment_items WHERE section_subject_teacher_id = ?');
+        $currentItems->execute([$sstId]);
+        $itemInfo = [];
+        foreach ($currentItems->fetchAll() as $row) {
+            $itemInfo[(int) $row['id']] = ['name' => $row['item_name'], 'highest' => (float) $row['highest_possible_score']];
+        }
+
         $scores = $_POST['scores'] ?? [];
         $upsert = $pdo->prepare('INSERT INTO student_scores (student_id, assessment_item_id, raw_score) VALUES (?, ?, ?)
             ON DUPLICATE KEY UPDATE raw_score = VALUES(raw_score)');
+        // Rejected cells are skipped, not clamped — silently capping a score a teacher typed
+        // (e.g. an 80 meant to be an 8) would hide the mistake instead of surfacing it. Every
+        // other valid cell in the same submission still saves; only the out-of-range ones are
+        // held back and reported.
+        $rejected = [];
         foreach ($scores as $itemId => $byStudent) {
+            $itemId = (int) $itemId;
+            $info = $itemInfo[$itemId] ?? null;
             foreach ($byStudent as $studentId => $rawValue) {
                 $rawValue = trim((string) $rawValue);
+                if ($rawValue === '') {
+                    $upsert->execute([(int) $studentId, $itemId, null]);
+                    continue;
+                }
+                if (!$info) {
+                    continue;
+                }
                 // Whole numbers only — the input's step="1" already nudges this, but that's
                 // client-side only, so round here too rather than trust it.
-                $upsert->execute([(int) $studentId, (int) $itemId, $rawValue === '' ? null : (float) round((float) $rawValue)]);
+                $rounded = (float) round((float) $rawValue);
+                if ($rounded < 0 || $rounded > $info['highest']) {
+                    $rejected[] = ['student_id' => (int) $studentId, 'item_name' => $info['name'], 'highest' => $info['highest'], 'entered' => $rounded];
+                    continue;
+                }
+                $upsert->execute([(int) $studentId, $itemId, $rounded]);
             }
         }
         recompute_term_grades_for_assignment($sstId, $term);
         if ($submission && $submission['status'] === 'not_started') {
             $pdo->prepare("UPDATE submission_status SET status = 'in_progress' WHERE section_subject_teacher_id = ? AND term = ?")->execute([$sstId, $term]);
         }
-        flash_set('success', 'Scores saved.');
+        if ($rejected) {
+            $nameStmt = $pdo->prepare('SELECT full_name FROM students WHERE id = ?');
+            $details = [];
+            foreach ($rejected as $r) {
+                $nameStmt->execute([$r['student_id']]);
+                $studentName = $nameStmt->fetchColumn() ?: 'that student';
+                $details[] = "$studentName — {$r['item_name']}: {$r['entered']} (highest is {$r['highest']})";
+            }
+            flash_set('error', 'Everything else saved, but ' . count($rejected) . ' score(s) were out of range and NOT saved: ' . implode('; ', $details));
+        } else {
+            flash_set('success', 'Scores saved.');
+        }
     }
     redirect("/teacher/class_record.php?sst_id=$sstId&term=$term");
 }
@@ -382,7 +424,7 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
                 <input type="number" step="1" min="0" max="<?= h($item['highest_possible_score']) ?>"
                   name="scores[<?= (int) $item['id'] ?>][<?= (int) $student['id'] ?>]"
                   value="<?= h($scoreLookup[$item['id']][$student['id']] ?? '') ?>"
-                  data-row="<?= $rowIndex ?>" data-col="<?= $itemColumns[$item['id']] ?>"
+                  data-row="<?= $rowIndex ?>" data-col="<?= $itemColumns[$item['id']] ?>" data-item-id="<?= (int) $item['id'] ?>"
                   <?= $editable ? '' : 'disabled' ?>
                   class="js-grade-cell w-16 px-2 py-1 border border-slate-300 rounded text-center disabled:bg-slate-50 disabled:text-slate-400 focus:border-accent-500 focus:ring-1 focus:ring-accent-500">
               </td>
