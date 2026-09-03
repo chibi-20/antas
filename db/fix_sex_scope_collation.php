@@ -50,7 +50,7 @@ if ($currentCollation === $targetCollation) {
 // $targetCollation comes from information_schema (MySQL's own fixed vocabulary of real
 // collation names), never from user input, so building the ALTER statement with it directly
 // is safe.
-$pdo->exec("ALTER TABLE section_subject_teachers MODIFY COLUMN sex_scope ENUM('ALL','M','F') NOT NULL DEFAULT 'ALL' COLLATE $targetCollation");
+$pdo->exec("ALTER TABLE section_subject_teachers MODIFY COLUMN sex_scope ENUM('ALL','M','F','MIX') NOT NULL DEFAULT 'ALL' COLLATE $targetCollation");
 
 $stmt->execute(['section_subject_teachers', 'sex_scope']);
 $newCollation = $stmt->fetchColumn();

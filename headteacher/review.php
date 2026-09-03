@@ -1,9 +1,5 @@
 <?php
 declare(strict_types=1);
-ini_set('display_errors', '1');
-ini_set('display_startup_errors', '1');
-ini_set('log_errors', '1');
-error_reporting(E_ALL);
 require_once __DIR__ . '/../includes/layout.php';
 require_once __DIR__ . '/../includes/helpers.php';
 
@@ -104,6 +100,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($sexScopeForSnapshot === 'ALL') {
                 $studentsStmt = $pdo->prepare('SELECT id FROM students WHERE section_id = ? AND is_active = 1');
                 $studentsStmt->execute([$assignment['section_id']]);
+            } elseif ($sexScopeForSnapshot === 'MIX') {
+                $studentsStmt = $pdo->prepare('SELECT student_id AS id FROM sst_student_claims WHERE section_subject_teacher_id = ?');
+                $studentsStmt->execute([$sstId]);
             } else {
                 $studentsStmt = $pdo->prepare('SELECT id FROM students WHERE section_id = ? AND is_active = 1 AND sex = ?');
                 $studentsStmt->execute([$assignment['section_id'], $sexScopeForSnapshot]);
@@ -154,6 +153,11 @@ $sexScope = strtoupper(trim((string) ($assignment['sex_scope'] ?? 'ALL')));
 if ($sexScope === 'ALL') {
     $students = $pdo->prepare("SELECT * FROM students WHERE section_id = ? AND is_active = 1 ORDER BY FIELD(sex, 'M', 'F'), full_name");
     $students->execute([$assignment['section_id']]);
+} elseif ($sexScope === 'MIX') {
+    $students = $pdo->prepare("SELECT st.* FROM students st
+        JOIN sst_student_claims ssc ON ssc.student_id = st.id AND ssc.section_subject_teacher_id = ?
+        WHERE st.is_active = 1 ORDER BY FIELD(st.sex, 'M', 'F'), st.full_name");
+    $students->execute([$sstId]);
 } else {
     $students = $pdo->prepare("SELECT * FROM students WHERE section_id = ? AND is_active = 1 AND sex = ? ORDER BY FIELD(sex, 'M', 'F'), full_name");
     $students->execute([$assignment['section_id'], $sexScope]);

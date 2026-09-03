@@ -37,8 +37,12 @@
 
 .slip-empty { border-style: dashed; opacity: 0.3; }
 
-.slip-header { text-align: center; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; margin-bottom: 6px; }
-.slip-title { font-weight: 600; font-size: 13px; }
+.slip-header { display: flex; align-items: center; gap: 6px; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; margin-bottom: 6px; }
+.slip-logo { width: 34px; height: 34px; object-fit: contain; flex-shrink: 0; }
+.slip-header-text { flex: 1; text-align: center; }
+.slip-deped-line { font-size: 6.5px; line-height: 1.2; color: #334155; }
+.slip-school-name { font-size: 7.5px; font-weight: 700; line-height: 1.3; margin-top: 1px; text-transform: uppercase; white-space: nowrap; }
+.slip-title { font-weight: 600; font-size: 13px; margin-top: 2px; }
 .slip-sub { color: #64748b; font-size: 10px; }
 .slip-student { margin-bottom: 6px; line-height: 1.4; }
 .slip-table { width: 100%; border-collapse: collapse; flex: 1; }

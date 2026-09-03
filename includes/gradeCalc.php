@@ -151,6 +151,24 @@ function recompute_term_grade(int $studentId, int $subjectId, int $term, int $sc
     }
 
     if (!$sstId) {
+        // 3rd fallback: a MIX row that hand-picked this specific student. Mutual exclusivity
+        // with the ALL/sex-specific cases above is guaranteed by sst_scope_conflict(), so
+        // trying the three in sequence and stopping at first match is safe — same reasoning
+        // already used for the ALL-then-sex fallback above.
+        $stmt = $pdo->prepare("SELECT sst.id FROM section_subject_teachers sst
+            JOIN sst_student_claims ssc ON ssc.section_subject_teacher_id = sst.id AND ssc.student_id = ?
+            WHERE sst.section_id = (SELECT section_id FROM students WHERE id = ?)
+              AND sst.subject_id = ? AND sst.school_year_id = ?
+              AND sst.is_active = 1
+              AND (sst.term_scope = 0 OR sst.term_scope = ?)
+              AND sst.sex_scope = 'MIX'
+            ORDER BY (sst.term_scope <> 0) DESC, sst.id DESC
+            LIMIT 1");
+        $stmt->execute([$studentId, $studentId, $subjectId, $schoolYearId, $term]);
+        $sstId = $stmt->fetchColumn();
+    }
+
+    if (!$sstId) {
         return;
     }
     $sstId = (int) $sstId;
@@ -260,6 +278,11 @@ if ($sexScope === 'ALL') {
     $students->execute([
         $sst['section_id'],
     ]);
+} elseif ($sexScope === 'MIX') {
+    // No section/sex filter needed at all — sst_student_claims already scopes exactly to
+    // this assignment.
+    $students = $pdo->prepare('SELECT student_id FROM sst_student_claims WHERE section_subject_teacher_id = ?');
+    $students->execute([$sectionSubjectTeacherId]);
 } else {
     $students = $pdo->prepare('
         SELECT id

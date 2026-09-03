@@ -35,8 +35,16 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
   <?php foreach ($page as $student): ?>
   <div class="slip">
     <div class="slip-header">
-      <div class="slip-title">Term Grade Slip</div>
-      <div class="slip-sub"><?= h($year['year_label'] ?? '') ?> · Term <?= $term ?></div>
+      <img src="<?= h(url('/assets/img/school_logo.png')) ?>" alt="" class="slip-logo" onerror="this.style.display='none'">
+      <div class="slip-header-text">
+        <div class="slip-deped-line">Republic of the Philippines</div>
+        <div class="slip-deped-line">Department of Education</div>
+        <div class="slip-deped-line">Region IV-A (CALABARZON)</div>
+        <div class="slip-deped-line">Schools Division of Biñan City</div>
+        <div class="slip-school-name">Jacobo Z. Gonzales Memorial National High School</div>
+        <div class="slip-title">Term Grade Slip</div>
+        <div class="slip-sub"><?= h($year['year_label'] ?? '') ?> · Term <?= $term ?></div>
+      </div>
     </div>
     <div class="slip-student">
       <div><strong><?= h($student['full_name']) ?></strong></div>
@@ -84,7 +92,6 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
     <?php $avg = grade_whole($data['averages'][$student['id']]['average'] ?? null); ?>
     <div class="slip-footer">
       <div>General Average: <strong class="<?= $avg !== null ? grade_display_class((float) $avg) : '' ?>"><?= $avg !== null ? h($avg) : '—' ?></strong><?php if ($avg !== null): ?><span class="descriptor">(<?= h(grade_descriptor_letter((float) $avg)) ?>)</span><?php endif; ?></div>
-      <div>Rank in Section: <strong><?= h($data['averages'][$student['id']]['rank_in_section'] ?? '—') ?></strong></div>
     </div>
     <div class="slip-legend"><?= h(GRADE_DESCRIPTOR_LEGEND) ?></div>
   </div>

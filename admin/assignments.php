@@ -20,18 +20,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $teacherId = (int) ($_POST['teacher_id'] ?? 0);
         $termScope = (int) ($_POST['term_scope'] ?? 0);
         $sexScope = $_POST['sex_scope'] ?? 'ALL';
+        $studentIds = array_values(array_unique(array_map('intval', $_POST['student_ids'] ?? [])));
         $err = (!$schoolYearId || !$sectionId || !$subjectId || !$teacherId) ? 'All fields are required.' : null;
         if (!$err && ($termScope < 0 || $termScope > 3)) {
             $err = 'Invalid term.';
         }
-        if (!$err && !in_array($sexScope, ['ALL', 'M', 'F'], true)) {
+        if (!$err && !in_array($sexScope, ['ALL', 'M', 'F', 'MIX'], true)) {
             $err = 'Invalid "Applies To" value.';
+        }
+        if (!$err && $sexScope === 'MIX') {
+            if (!$studentIds) {
+                $err = 'Pick at least one student — use "Or create a Mix assignment" below, which shows the student picker.';
+            } else {
+                // A disabled checkbox is omitted by a real browser, but a crafted request
+                // isn't — every posted id must genuinely belong to this section and be active.
+                $placeholders = implode(',', array_fill(0, count($studentIds), '?'));
+                $validStmt = $pdo->prepare("SELECT id FROM students WHERE section_id = ? AND is_active = 1 AND id IN ($placeholders)");
+                $validStmt->execute(array_merge([$sectionId], $studentIds));
+                if (count($validStmt->fetchAll(PDO::FETCH_COLUMN)) !== count($studentIds)) {
+                    $err = 'One or more selected students are no longer valid — please try again.';
+                }
+            }
         }
     }
 
     if ($action === 'create') {
         if (!$err) {
-            $err = sst_scope_conflict($pdo, $sectionId, $subjectId, $schoolYearId, $termScope, $sexScope);
+            $err = sst_scope_conflict($pdo, $sectionId, $subjectId, $schoolYearId, $termScope, $sexScope, null, $studentIds);
         }
         if ($err) {
             flash_set('error', $err);
@@ -41,6 +56,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->prepare('INSERT INTO section_subject_teachers (section_id, subject_id, teacher_id, school_year_id, term_scope, sex_scope) VALUES (?, ?, ?, ?, ?, ?)')
                     ->execute([$sectionId, $subjectId, $teacherId, $schoolYearId, $termScope, $sexScope]);
                 $sstId = (int) $pdo->lastInsertId();
+                if ($sexScope === 'MIX') {
+                    $claimStmt = $pdo->prepare('INSERT INTO sst_student_claims (section_subject_teacher_id, student_id) VALUES (?, ?)');
+                    foreach ($studentIds as $sid) {
+                        $claimStmt->execute([$sstId, $sid]);
+                    }
+                }
                 $stmt = $pdo->prepare('INSERT INTO submission_status (section_subject_teacher_id, term, status) VALUES (?, ?, ?)');
                 for ($t = 1; $t <= 3; $t++) {
                     $stmt->execute([$sstId, $t, 'not_started']);
@@ -61,18 +82,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$oldRow) {
                 $err = 'Assignment not found.';
             } else {
-                $err = sst_narrowing_blocked($pdo, $oldRow, $termScope, $sexScope)
-                    ?? sst_scope_conflict($pdo, $sectionId, $subjectId, $schoolYearId, $termScope, $sexScope, $id);
+                $newStudentIds = ($oldRow['sex_scope'] === 'MIX' && $sexScope === 'MIX') ? $studentIds : null;
+                $err = sst_narrowing_blocked($pdo, $oldRow, $termScope, $sexScope, $newStudentIds)
+                    ?? sst_scope_conflict($pdo, $sectionId, $subjectId, $schoolYearId, $termScope, $sexScope, $id, $studentIds);
             }
         }
         if ($err) {
             flash_set('error', $err);
         } else {
             try {
+                $pdo->beginTransaction();
                 $pdo->prepare('UPDATE section_subject_teachers SET section_id=?, subject_id=?, teacher_id=?, school_year_id=?, term_scope=?, sex_scope=? WHERE id=?')
                     ->execute([$sectionId, $subjectId, $teacherId, $schoolYearId, $termScope, $sexScope, $id]);
+                // Full replace is simplest and correct at these list sizes — delete then
+                // re-insert rather than diffing, mirroring how the rest of this codebase
+                // prefers a plain rewrite over incremental patching when the data is small.
+                $pdo->prepare('DELETE FROM sst_student_claims WHERE section_subject_teacher_id = ?')->execute([$id]);
+                if ($sexScope === 'MIX') {
+                    $claimStmt = $pdo->prepare('INSERT INTO sst_student_claims (section_subject_teacher_id, student_id) VALUES (?, ?)');
+                    foreach ($studentIds as $sid) {
+                        $claimStmt->execute([$id, $sid]);
+                    }
+                }
+                $pdo->commit();
                 flash_set('success', 'Assignment updated.');
             } catch (PDOException $e) {
+                $pdo->rollBack();
                 flash_set('error', 'Could not update assignment — this section/subject/school year/term/scope combination may already exist.');
             }
         }
@@ -119,7 +154,8 @@ $teachers = $pdo->query("SELECT * FROM users WHERE role = 'subject_teacher' AND 
 $gradeLevels = $pdo->query('SELECT * FROM grade_levels WHERE is_active = 1 ORDER BY sort_order')->fetchAll();
 $sectionLabels = array_map(fn($s) => ['id' => $s['id'], 'label' => $s['grade_level'] . ' - ' . $s['section_name'] . ' (' . $s['year_label'] . ')'], $sections);
 
-$assignments = $pdo->query('SELECT sst.*, gl.name AS grade_level, sec.section_name, sub.subject_name, u.full_name AS teacher_name, sy.year_label
+$assignments = $pdo->query('SELECT sst.*, gl.name AS grade_level, sec.section_name, sub.subject_name, u.full_name AS teacher_name, sy.year_label,
+        (SELECT COUNT(*) FROM sst_student_claims ssc WHERE ssc.section_subject_teacher_id = sst.id) AS mix_claim_count
     FROM section_subject_teachers sst
     JOIN sections sec ON sec.id = sst.section_id
     JOIN grade_levels gl ON gl.id = sec.grade_level_id
@@ -141,6 +177,54 @@ if (isset($_GET['edit'])) {
     $s = $pdo->prepare('SELECT * FROM section_subject_teachers WHERE id = ?');
     $s->execute([(int) $_GET['edit']]);
     $editing = $s->fetch() ?: null;
+}
+
+// Editing an existing Mix row shows the picker inline immediately (no round trip needed — the
+// section/subject/year are already fixed by $editing). Converting an ALL/M/F row TO Mix via
+// this same form isn't supported in this pass — deactivate it and use the dedicated "create a
+// Mix assignment" flow below instead, which is a two-step reveal-on-reload since admin's form
+// is free-choice and there's no single roster to pre-render before those choices are made.
+$editingMixRoster = [];
+$editingMixCoveredBy = [];
+$editingMixCheckedIds = [];
+if ($editing && $editing['sex_scope'] === 'MIX') {
+    $rosterStmt = $pdo->prepare("SELECT id, sex, full_name FROM students WHERE section_id = ? AND is_active = 1 ORDER BY FIELD(sex, 'M', 'F'), full_name");
+    $rosterStmt->execute([$editing['section_id']]);
+    $editingMixRoster = $rosterStmt->fetchAll();
+    $siblingRowsStmt = $pdo->prepare('SELECT sst.id, sst.term_scope, sst.sex_scope, sst.teacher_id, u.full_name AS teacher_name
+        FROM section_subject_teachers sst JOIN users u ON u.id = sst.teacher_id
+        WHERE sst.section_id = ? AND sst.subject_id = ? AND sst.school_year_id = ? AND sst.is_active = 1 AND sst.term_scope = ? AND sst.id != ?');
+    $siblingRowsStmt->execute([$editing['section_id'], $editing['subject_id'], $editing['school_year_id'], $editing['term_scope'], $editing['id']]);
+    $bucket = term_bucket_availability($pdo, (int) $editing['section_id'], $siblingRowsStmt->fetchAll(), $editingMixRoster);
+    $editingMixCoveredBy = $bucket['covered_by'];
+    $claimsStmt = $pdo->prepare('SELECT student_id FROM sst_student_claims WHERE section_subject_teacher_id = ?');
+    $claimsStmt->execute([$editing['id']]);
+    $editingMixCheckedIds = $claimsStmt->fetchAll(PDO::FETCH_COLUMN);
+}
+
+// "Or create a Mix assignment" flow, step 2: once step 1's small GET form has picked
+// School Year/Section/Subject/Teacher/Term, show the real picker + submit form.
+$mixPreview = null;
+if (!$editing && isset($_GET['pv_section_id'], $_GET['pv_subject_id'], $_GET['pv_school_year_id'], $_GET['pv_teacher_id'])) {
+    $pvSectionId = (int) $_GET['pv_section_id'];
+    $pvSubjectId = (int) $_GET['pv_subject_id'];
+    $pvSchoolYearId = (int) $_GET['pv_school_year_id'];
+    $pvTeacherId = (int) $_GET['pv_teacher_id'];
+    $pvTermScope = (int) ($_GET['pv_term_scope'] ?? 0);
+    if ($pvSectionId && $pvSubjectId && $pvSchoolYearId && $pvTeacherId) {
+        $rosterStmt = $pdo->prepare("SELECT id, sex, full_name FROM students WHERE section_id = ? AND is_active = 1 ORDER BY FIELD(sex, 'M', 'F'), full_name");
+        $rosterStmt->execute([$pvSectionId]);
+        $pvRoster = $rosterStmt->fetchAll();
+        $pvRowsStmt = $pdo->prepare('SELECT id, term_scope, sex_scope, teacher_id, (SELECT full_name FROM users WHERE id = teacher_id) AS teacher_name
+            FROM section_subject_teachers WHERE section_id = ? AND subject_id = ? AND school_year_id = ? AND is_active = 1 AND term_scope = ?');
+        $pvRowsStmt->execute([$pvSectionId, $pvSubjectId, $pvSchoolYearId, $pvTermScope]);
+        $mixPreview = [
+            'section_id' => $pvSectionId, 'subject_id' => $pvSubjectId, 'school_year_id' => $pvSchoolYearId,
+            'teacher_id' => $pvTeacherId, 'term_scope' => $pvTermScope,
+            'bucket' => term_bucket_availability($pdo, $pvSectionId, $pvRowsStmt->fetchAll(), $pvRoster),
+            'roster' => $pvRoster,
+        ];
+    }
 }
 
 // Card view: one card per teacher (avatar, subject/section counts) instead of one long flat
@@ -248,10 +332,18 @@ render_header('Subject Assignments');
             <option value="ALL" <?= $curSexScope === 'ALL' ? 'selected' : '' ?>>All Students</option>
             <option value="M" <?= $curSexScope === 'M' ? 'selected' : '' ?>>Male Only</option>
             <option value="F" <?= $curSexScope === 'F' ? 'selected' : '' ?>>Female Only</option>
+            <?php if ($curSexScope === 'MIX'): ?><option value="MIX" selected>Mix (specific students)</option><?php endif; ?>
           </select>
         </div>
       </div>
-      <p class="text-xs text-slate-400 mb-4">Only needed when a subject changes teachers mid-year or is split by sex (e.g. TLE) — leave both at their defaults otherwise.</p>
+      <?php if ($editing && $editing['sex_scope'] === 'MIX'): ?>
+      <label class="block text-sm font-medium text-slate-600 mb-1">Students</label>
+      <div class="border border-slate-200 rounded-lg p-2 mb-4 max-h-64 overflow-y-auto">
+        <?= render_student_picker($editingMixRoster, $editingMixCoveredBy, $editingMixCheckedIds, 'student_ids') ?>
+      </div>
+      <?php else: ?>
+      <p class="text-xs text-slate-400 mb-4">Only needed when a subject changes teachers mid-year or is split by sex (e.g. TLE) — leave both at their defaults otherwise. To create a new Mix (specific-students) assignment, use "Or create a Mix assignment" below — this form can't switch an existing row to Mix.</p>
+      <?php endif; ?>
       <div class="flex gap-2">
         <button type="submit" class="bg-accent-600 hover:bg-accent-700 text-white font-medium px-4 py-2 rounded-lg text-sm"><?= $editing ? 'Save Changes' : 'Add' ?></button>
         <?php if ($editing): ?><a href="<?= h(url('/admin/assignments.php')) ?>" class="px-4 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-100">Cancel</a><?php endif; ?>
@@ -259,6 +351,64 @@ render_header('Subject Assignments');
     </form>
   </div>
 </details>
+
+<?php if (!$editing): ?>
+<details class="mb-6" <?= $mixPreview ? 'open' : '' ?>>
+  <summary class="cursor-pointer select-none text-sm text-slate-500 hover:text-slate-700 mb-2">Or create a Mix (specific students) assignment</summary>
+  <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6 max-w-lg mt-2">
+    <?php if (!$mixPreview): ?>
+    <p class="text-xs text-slate-400 mb-4">For a teacher covering a hand-picked, mixed-sex subset of a section — not all students, and not cleanly "male only" or "female only". Pick the school year/section/subject/teacher/term first, then you'll choose exactly which students on the next step.</p>
+    <form method="get">
+      <label class="block text-sm font-medium text-slate-600 mb-1">School year</label>
+      <select name="pv_school_year_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+        <?= select_options($schoolYears, 'id', 'year_label', active_school_year()['id'] ?? null) ?>
+      </select>
+      <label class="block text-sm font-medium text-slate-600 mb-1">Section</label>
+      <select name="pv_section_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+        <?= select_options($sectionLabels, 'id', 'label', null) ?>
+      </select>
+      <label class="block text-sm font-medium text-slate-600 mb-1">Subject</label>
+      <select name="pv_subject_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+        <?= select_options($subjects, 'id', 'subject_name', null) ?>
+      </select>
+      <label class="block text-sm font-medium text-slate-600 mb-1">Teacher</label>
+      <select name="pv_teacher_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg js-searchable" data-placeholder="Search teachers…">
+        <?= select_options($teachers, 'id', 'full_name', null) ?>
+      </select>
+      <label class="block text-sm font-medium text-slate-600 mb-1">Term</label>
+      <select name="pv_term_scope" class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+        <option value="0">All Terms (default)</option>
+        <option value="1">Term 1</option>
+        <option value="2">Term 2</option>
+        <option value="3">Term 3</option>
+      </select>
+      <button type="submit" class="bg-accent-600 hover:bg-accent-700 text-white font-medium px-4 py-2 rounded-lg text-sm">Continue</button>
+    </form>
+    <?php else: ?>
+    <?php if (!$mixPreview['bucket']['mix_available']): ?>
+    <p class="text-sm text-rose-600 mb-4">Every student in this section is already covered for this term — nothing left to pick.</p>
+    <?php else: ?>
+    <form method="post">
+      <?= csrf_field() ?>
+      <input type="hidden" name="action" value="create">
+      <input type="hidden" name="school_year_id" value="<?= $mixPreview['school_year_id'] ?>">
+      <input type="hidden" name="section_id" value="<?= $mixPreview['section_id'] ?>">
+      <input type="hidden" name="subject_id" value="<?= $mixPreview['subject_id'] ?>">
+      <input type="hidden" name="teacher_id" value="<?= $mixPreview['teacher_id'] ?>">
+      <input type="hidden" name="term_scope" value="<?= $mixPreview['term_scope'] ?>">
+      <input type="hidden" name="sex_scope" value="MIX">
+      <label class="block text-sm font-medium text-slate-600 mb-1">Students</label>
+      <div class="border border-slate-200 rounded-lg p-2 mb-4 max-h-64 overflow-y-auto">
+        <?= render_student_picker($mixPreview['roster'], $mixPreview['bucket']['covered_by'], [], 'student_ids') ?>
+      </div>
+      <button type="submit" class="bg-accent-600 hover:bg-accent-700 text-white font-medium px-4 py-2 rounded-lg text-sm">Create Mix Assignment</button>
+    </form>
+    <?php endif; ?>
+    <a href="<?= h(url('/admin/assignments.php')) ?>" class="inline-block mt-3 text-xs text-slate-500 hover:underline">&larr; Start over</a>
+    <?php endif; ?>
+  </div>
+</details>
+<?php endif; ?>
 
 <details class="mb-6">
   <summary class="cursor-pointer select-none text-sm text-slate-500 hover:text-slate-700 mb-2">Or mark a teacher as eligible to self-claim classes</summary>
@@ -321,7 +471,15 @@ render_header('Subject Assignments');
         <td class="px-4 py-3 text-slate-600"><?= h($a['grade_level'] . ' - ' . $a['section_name']) ?></td>
         <td class="px-4 py-3 font-medium"><?= h($a['subject_name']) ?></td>
         <td class="px-4 py-3 text-slate-500"><?= (int) $a['term_scope'] === 0 ? 'All Terms' : 'Term ' . (int) $a['term_scope'] ?></td>
-        <td class="px-4 py-3 text-slate-500"><?= $a['sex_scope'] === 'ALL' ? 'All Students' : ($a['sex_scope'] === 'M' ? 'Male Only' : 'Female Only') ?></td>
+        <td class="px-4 py-3 text-slate-500"><?php
+          echo match ($a['sex_scope']) {
+              'ALL' => 'All Students',
+              'M' => 'Male Only',
+              'F' => 'Female Only',
+              'MIX' => 'Mix (' . (int) $a['mix_claim_count'] . ' students)',
+              default => h($a['sex_scope']),
+          };
+        ?></td>
         <td class="px-4 py-3"><?= $a['is_active'] ? '<span class="text-emerald-600">Active</span>' : '<span class="text-slate-400">Inactive</span>' ?></td>
         <td class="px-4 py-3 text-right space-x-2">
           <a href="<?= h(url('/admin/assignments.php?edit=' . $a['id'])) ?>" class="text-accent-600 hover:underline">Edit</a>

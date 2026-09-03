@@ -129,7 +129,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($submission && $submission['status'] === 'not_started') {
             $pdo->prepare("UPDATE submission_status SET status = 'in_progress' WHERE section_subject_teacher_id = ? AND term = ?")->execute([$sstId, $term]);
         }
-        if ($rejected) {
+
+        // "Submit for Review" is a second submit button in this same form (not a separate
+        // form/page) specifically so a click always saves whatever's on screen first — the
+        // two used to be independent, and a teacher who clicked Submit without clicking Save
+        // Scores first would lock the term with none of their scores ever persisted.
+        $submitForReview = ($_POST['post_action'] ?? '') === 'submit_for_review';
+        if ($submitForReview && !$rejected) {
+            $currentStatus = $pdo->prepare('SELECT status FROM submission_status WHERE section_subject_teacher_id = ? AND term = ?');
+            $currentStatus->execute([$sstId, $term]);
+            $statusNow = $currentStatus->fetchColumn();
+            if (in_array($statusNow, ['not_started', 'in_progress', 'returned_for_revision'], true)) {
+                $pdo->prepare("UPDATE submission_status SET status = 'submitted_for_review', submitted_at = NOW(), revision_comment = NULL WHERE section_subject_teacher_id = ? AND term = ?")
+                    ->execute([$sstId, $term]);
+                flash_set('success', 'Scores saved and submitted for Head Teacher review.');
+            } else {
+                flash_set('error', 'This term cannot be submitted from its current status.');
+            }
+        } elseif ($rejected) {
             $nameStmt = $pdo->prepare('SELECT full_name FROM students WHERE id = ?');
             $details = [];
             foreach ($rejected as $r) {
@@ -137,7 +154,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $studentName = $nameStmt->fetchColumn() ?: 'that student';
                 $details[] = "$studentName — {$r['item_name']}: {$r['entered']} (highest is {$r['highest']})";
             }
-            flash_set('error', 'Everything else saved, but ' . count($rejected) . ' score(s) were out of range and NOT saved: ' . implode('; ', $details));
+            $msg = 'Everything else saved, but ' . count($rejected) . ' score(s) were out of range and NOT saved: ' . implode('; ', $details);
+            if ($submitForReview) {
+                $msg .= ' Fix these and submit again — nothing was submitted for review.';
+            }
+            flash_set('error', $msg);
         } else {
             flash_set('success', 'Scores saved.');
         }
@@ -207,6 +228,17 @@ if ($sexScope === 'ALL') {
     $studentsStmt->execute([
         $assignment['section_id'],
     ]);
+} elseif ($sexScope === 'MIX') {
+    // No section/sex filter needed at all — sst_student_claims already scopes exactly to
+    // this assignment.
+    $studentsStmt = $pdo->prepare("
+        SELECT st.*
+        FROM students st
+        JOIN sst_student_claims ssc ON ssc.student_id = st.id AND ssc.section_subject_teacher_id = ?
+        WHERE st.is_active = 1
+        ORDER BY FIELD(st.sex, 'M', 'F'), st.full_name
+    ");
+    $studentsStmt->execute([$sstId]);
 } else {
     $studentsStmt = $pdo->prepare("
         SELECT *
@@ -477,18 +509,12 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
     </table>
   </div>
   <?php if ($editable && $items && $students): ?>
-  <button type="submit" class="bg-accent-600 hover:bg-accent-700 text-white font-medium px-5 py-2.5 rounded-lg text-sm">Save Scores</button>
+  <div class="flex gap-3">
+    <button type="submit" class="bg-accent-600 hover:bg-accent-700 text-white font-medium px-5 py-2.5 rounded-lg text-sm">Save Scores</button>
+    <button type="submit" name="post_action" value="submit_for_review" data-confirm="Submit this term for Head Teacher review? You won't be able to edit scores until it's returned or published." class="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-5 py-2.5 rounded-lg text-sm">Save &amp; Submit for Review</button>
+  </div>
   <?php endif; ?>
 </form>
-
-<?php if ($editable): ?>
-<form method="post" action="<?= h(url('/teacher/submit.php')) ?>" class="mt-4" data-confirm="Submit this term for Head Teacher review? You won't be able to edit scores until it's returned or published.">
-  <?= csrf_field() ?>
-  <input type="hidden" name="sst_id" value="<?= $sstId ?>">
-  <input type="hidden" name="term" value="<?= $term ?>">
-  <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-5 py-2.5 rounded-lg text-sm">Submit for Review</button>
-</form>
-<?php endif; ?>
 
 <?php if ($editable): ?>
 <script>

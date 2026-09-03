@@ -82,8 +82,21 @@ if ($subjectId && in_array($subjectId, $supervisedSubjectIds, true)) {
         LEFT JOIN term_grades tg ON tg.student_id = st.id AND tg.subject_id = sst.subject_id AND tg.term = ? AND tg.school_year_id = sst.school_year_id
         WHERE sst.subject_id = ? AND sst.school_year_id = ? AND sst.is_active = 1 AND ss.status = "published"
           AND (sst.term_scope = 0 OR sst.term_scope = ?)
+        UNION ALL
+        SELECT sec.id AS section_id, sec.section_name, gl.id AS grade_level_id, gl.name AS grade_level, gl.sort_order,
+            st.id AS student_id, st.sex, tg.transmuted_grade
+        FROM section_subject_teachers sst
+        JOIN sections sec ON sec.id = sst.section_id
+        JOIN grade_levels gl ON gl.id = sec.grade_level_id
+        JOIN sst_student_claims ssc ON ssc.section_subject_teacher_id = sst.id
+        JOIN students st ON st.id = ssc.student_id AND st.is_active = 1
+        JOIN submission_status ss ON ss.section_subject_teacher_id = sst.id AND ss.term = ?
+        LEFT JOIN term_grades tg ON tg.student_id = st.id AND tg.subject_id = sst.subject_id AND tg.term = ? AND tg.school_year_id = sst.school_year_id
+        WHERE sst.subject_id = ? AND sst.school_year_id = ? AND sst.is_active = 1 AND ss.status = "published"
+          AND (sst.term_scope = 0 OR sst.term_scope = ?)
+          AND sst.sex_scope = "MIX"
         ORDER BY sort_order, section_name');
-    $stmt->execute([$term, $term, $subjectId, $year['id'], $term, $term, $term, $subjectId, $year['id'], $term]);
+    $stmt->execute([$term, $term, $subjectId, $year['id'], $term, $term, $term, $subjectId, $year['id'], $term, $term, $term, $subjectId, $year['id'], $term]);
 
     foreach ($stmt->fetchAll() as $row) {
         if ($row['transmuted_grade'] === null) {

@@ -218,10 +218,33 @@ function get_consolidated_data(int $sectionId, int $schoolYearId, int $term): ar
 
     $subjectMeta = [];
     $assignmentsBySubject = [];
+    $mixSstIds = [];
     foreach ($rows as $row) {
         $sid = (int) $row['subject_id'];
         $subjectMeta[$sid] = ['subject_name' => $row['subject_name'], 'parent_subject_id' => $row['parent_subject_id'], 'sort_order' => (int) $row['sort_order']];
         $assignmentsBySubject[$sid][] = ['sst_id' => (int) $row['sst_id'], 'sex_scope' => $row['sex_scope'], 'status' => $row['status'] ?? 'not_started'];
+        if ($row['sex_scope'] === 'MIX') {
+            $mixSstIds[] = (int) $row['sst_id'];
+        }
+    }
+
+    // subject_assignment_for_student() needs the actual picked roster for a MIX assignment to
+    // resolve which student it covers — a MIX row's sex_scope alone can't tell you that.
+    $claimedByS = [];
+    if ($mixSstIds) {
+        $placeholders = implode(',', array_fill(0, count($mixSstIds), '?'));
+        $claimsStmt = $pdo->prepare("SELECT section_subject_teacher_id, student_id FROM sst_student_claims WHERE section_subject_teacher_id IN ($placeholders)");
+        $claimsStmt->execute($mixSstIds);
+        foreach ($claimsStmt->fetchAll() as $claim) {
+            $claimedByS[(int) $claim['section_subject_teacher_id']][] = (int) $claim['student_id'];
+        }
+    }
+    foreach ($assignmentsBySubject as $sid => $assignments) {
+        foreach ($assignments as $i => $a) {
+            if ($a['sex_scope'] === 'MIX') {
+                $assignmentsBySubject[$sid][$i]['claimed_student_ids'] = $claimedByS[$a['sst_id']] ?? [];
+            }
+        }
     }
 
     $subjects = [];
@@ -345,9 +368,20 @@ function get_consolidated_data(int $sectionId, int $schoolYearId, int $term): ar
               AND sst.is_active = 1
               AND (sst.term_scope = 0 OR sst.term_scope = tg.term)
               AND sst.sex_scope = st.sex
+              AND tg.term IN ($termsPlaceholders) AND tg.subject_id IN ($childPlaceholders)
+            UNION ALL
+            SELECT tg.student_id, tg.term, tg.subject_id, tg.transmuted_grade
+            FROM term_grades tg
+            JOIN section_subject_teachers sst ON sst.subject_id = tg.subject_id AND sst.school_year_id = tg.school_year_id
+            JOIN submission_status ss ON ss.section_subject_teacher_id = sst.id AND ss.term = tg.term
+            JOIN sst_student_claims ssc ON ssc.section_subject_teacher_id = sst.id AND ssc.student_id = tg.student_id
+            WHERE ss.status = 'published' AND sst.section_id = ? AND tg.school_year_id = ?
+              AND sst.is_active = 1
+              AND (sst.term_scope = 0 OR sst.term_scope = tg.term)
+              AND sst.sex_scope = 'MIX'
               AND tg.term IN ($termsPlaceholders) AND tg.subject_id IN ($childPlaceholders)");
         $branchParams = array_merge([$sectionId, $schoolYearId], range(1, $term), $childSubjectIds);
-        $stmt->execute(array_merge($branchParams, $branchParams));
+        $stmt->execute(array_merge($branchParams, $branchParams, $branchParams));
         foreach ($stmt->fetchAll() as $row) {
             $gradesByTerm[(int) $row['term']][(int) $row['student_id']][(int) $row['subject_id']] = $row['transmuted_grade'];
         }
@@ -411,6 +445,12 @@ function get_consolidated_data(int $sectionId, int $schoolYearId, int $term): ar
 function subject_assignment_for_student(array $subject, array $student): ?array
 {
     foreach ($subject['assignments'] as $assignment) {
+        if ($assignment['sex_scope'] === 'MIX') {
+            if (in_array((int) $student['id'], $assignment['claimed_student_ids'] ?? [], true)) {
+                return $assignment;
+            }
+            continue;
+        }
         if ($assignment['sex_scope'] === $student['sex']) {
             return $assignment;
         }
@@ -424,17 +464,50 @@ function subject_assignment_for_student(array $subject, array $student): ?array
 }
 
 /**
- * Checks whether inserting/updating a section_subject_teachers row with the given
- * (term_scope, sex_scope) would violate the TLE scoping business rule: active rows for a
- * (section, subject, school year) must be either one term_scope=0/sex_scope=ALL row, or 1-3
- * rows with distinct specific term_scope values, each covered term being either one ALL row
- * or an M+F pair. The DB unique key only rejects exact-duplicate tuples — it can't catch a
- * term_scope=0 row coexisting with a specific-term row, or an ALL row coexisting with an M/F
- * row for the same term. Returns an error message if there's a conflict, null if clear.
+ * Turns a scope (ALL/M/F/MIX) into the actual list of student IDs it covers — the one place
+ * every conflict/availability check below resolves "coverage" through, so ALL/M/F/MIX are
+ * handled uniformly instead of via combinatorial category special-casing. For an existing row,
+ * pass its $sstId (MIX reads sst_student_claims). For a not-yet-inserted candidate claim, pass
+ * $explicitStudentIds instead (only meaningful when $sexScope === 'MIX').
  */
-function sst_scope_conflict(PDO $pdo, int $sectionId, int $subjectId, int $schoolYearId, int $termScope, string $sexScope, ?int $excludeId = null): ?string
+function resolve_covered_student_ids(PDO $pdo, int $sectionId, string $sexScope, ?int $sstId = null, array $explicitStudentIds = []): array
 {
-    $sql = 'SELECT term_scope, sex_scope FROM section_subject_teachers
+    if ($sexScope === 'MIX') {
+        if ($sstId !== null) {
+            $stmt = $pdo->prepare('SELECT student_id FROM sst_student_claims WHERE section_subject_teacher_id = ?');
+            $stmt->execute([$sstId]);
+            return $stmt->fetchAll(PDO::FETCH_COLUMN);
+        }
+        return $explicitStudentIds;
+    }
+    $sql = 'SELECT id FROM students WHERE section_id = ? AND is_active = 1';
+    $params = [$sectionId];
+    if ($sexScope !== 'ALL') {
+        $sql .= ' AND sex = ?';
+        $params[] = $sexScope;
+    }
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($params);
+    return $stmt->fetchAll(PDO::FETCH_COLUMN);
+}
+
+/**
+ * Checks whether inserting/updating a section_subject_teachers row with the given
+ * (term_scope, sex_scope[, explicit student picks for MIX]) would violate the TLE scoping
+ * business rule: active rows for a (section, subject, school year) must be either one
+ * term_scope=0 row or 1-3 rows with distinct specific term_scope values, and within a shared
+ * term no two rows may cover the same actual student. Resolves both sides to real student-ID
+ * sets (via resolve_covered_student_ids()) and rejects on any intersection — this is what
+ * correctly generalizes to MIX without combinatorial special-casing, while producing the exact
+ * same accept/reject behavior as before for every ALL/M/F-only combination. The DB unique key
+ * only rejects exact-duplicate tuples (or, for MIX, exact-duplicate-by-same-teacher — see
+ * db/migrations/0015_mix_sex_scope.sql) — it can't catch a term_scope=0 row coexisting with a
+ * specific-term row, or two rows whose actual covered students overlap. Returns an error
+ * message if there's a conflict, null if clear.
+ */
+function sst_scope_conflict(PDO $pdo, int $sectionId, int $subjectId, int $schoolYearId, int $termScope, string $sexScope, ?int $excludeId = null, array $explicitStudentIds = []): ?string
+{
+    $sql = 'SELECT id, term_scope, sex_scope FROM section_subject_teachers
         WHERE section_id = ? AND subject_id = ? AND school_year_id = ? AND is_active = 1';
     $params = [$sectionId, $subjectId, $schoolYearId];
     if ($excludeId !== null) {
@@ -452,16 +525,25 @@ function sst_scope_conflict(PDO $pdo, int $sectionId, int $subjectId, int $schoo
         }
     }
 
-    foreach ($existing as $row) {
-        if ((int) $row['term_scope'] !== $termScope) {
-            continue;
-        }
-        $existingSex = $row['sex_scope'];
-        if ($sexScope === 'ALL' || $existingSex === 'ALL') {
-            return 'This term already has an assignment for this section/subject that covers all students — deactivate it first.';
-        }
-        if ($existingSex === $sexScope) {
-            return 'This term already has a ' . ($sexScope === 'M' ? 'Male-only' : 'Female-only') . ' assignment for this section/subject.';
+    $sameTermRows = array_values(array_filter($existing, fn($row) => (int) $row['term_scope'] === $termScope));
+    if ($sameTermRows) {
+        $newIds = resolve_covered_student_ids($pdo, $sectionId, $sexScope, null, $explicitStudentIds);
+        $newSet = array_flip($newIds);
+        foreach ($sameTermRows as $row) {
+            $existingIds = resolve_covered_student_ids($pdo, $sectionId, $row['sex_scope'], (int) $row['id']);
+            if (array_intersect_key($newSet, array_flip($existingIds))) {
+                // Keep the friendlier, specific wording when both sides are plain ALL/M/F
+                // (matches the exact messages this function has always returned); fall back to
+                // a generic message once MIX is involved on either side, since "which specific
+                // students overlap" is more useful there than a category name.
+                if ($sexScope !== 'MIX' && $row['sex_scope'] !== 'MIX') {
+                    if ($sexScope === 'ALL' || $row['sex_scope'] === 'ALL') {
+                        return 'This term already has an assignment for this section/subject that covers all students — deactivate it first.';
+                    }
+                    return 'This term already has a ' . ($sexScope === 'M' ? 'Male-only' : 'Female-only') . ' assignment for this section/subject.';
+                }
+                return 'This term already has an assignment covering one or more of the selected students — pick a different set or deactivate the conflicting assignment first.';
+            }
         }
     }
 
@@ -469,16 +551,27 @@ function sst_scope_conflict(PDO $pdo, int $sectionId, int $subjectId, int $schoo
 }
 
 /**
- * Refuses to narrow an existing assignment's coverage (whole-year -> term-specific, or
- * all-students -> one sex) once it already has real grading activity — assessment items or
- * any submission_status past not_started. Narrowing would silently orphan scores/status rows
- * that belong to terms/students the row no longer covers; that's a data-integrity decision
- * for the admin to resolve manually (e.g. deactivate and recreate), not something to patch up.
+ * Refuses to narrow an existing assignment's coverage (whole-year -> term-specific,
+ * all-students -> one sex, or removing a student from a MIX pick) once it already has real
+ * grading activity — assessment items or any submission_status past not_started. Narrowing
+ * would silently orphan scores/status rows that belong to terms/students the row no longer
+ * covers; that's a data-integrity decision for the admin to resolve manually (e.g. deactivate
+ * and recreate), not something to patch up. $newStudentIds is only meaningful (and only
+ * checked) when both the old and new sex_scope are 'MIX' — pass null otherwise.
  */
-function sst_narrowing_blocked(PDO $pdo, array $oldRow, int $newTermScope, string $newSexScope): ?string
+function sst_narrowing_blocked(PDO $pdo, array $oldRow, int $newTermScope, string $newSexScope, ?array $newStudentIds = null): ?string
 {
     $isNarrowing = ((int) $oldRow['term_scope'] === 0 && $newTermScope !== 0)
         || ($oldRow['sex_scope'] === 'ALL' && $newSexScope !== 'ALL');
+
+    if (!$isNarrowing && $oldRow['sex_scope'] === 'MIX' && $newSexScope === 'MIX' && $newStudentIds !== null) {
+        $existingStmt = $pdo->prepare('SELECT student_id FROM sst_student_claims WHERE section_subject_teacher_id = ?');
+        $existingStmt->execute([(int) $oldRow['id']]);
+        $existingIds = $existingStmt->fetchAll(PDO::FETCH_COLUMN);
+        if (array_diff($existingIds, $newStudentIds)) {
+            $isNarrowing = true; // someone already-picked is being removed from the list
+        }
+    }
     if (!$isNarrowing) {
         return null;
     }
@@ -500,54 +593,129 @@ function sst_narrowing_blocked(PDO $pdo, array $oldRow, int $newTermScope, strin
 }
 
 /**
- * Read-only display helper for the self-claim UI (teacher/claim.php): reports which parts
- * of a (section, subject, school year) are still open to claim vs. already taken, and by
- * whom. This is NEVER the write-time authority — sst_scope_conflict() re-validates at
- * submit time regardless of what this returns, since a slot shown open here can be claimed
- * by someone else microseconds later.
+ * Per-bucket (whole-year, or one specific term) availability for a (section, subject, school
+ * year) — who's already covered by an active row in that bucket, and by whom, resolved down to
+ * individual students. Built once and reused for both the quick All/Male/Female buttons and the
+ * Mix student-picker (greying out already-covered checkboxes), since a MIX row already needs
+ * per-student resolution and the old flat ALL/M/F-only bucket model can't represent "an M row
+ * exists, plus a MIX row already grabbed 3 girls" any other way.
  *
- * Returns ['whole_year_open' => bool, 'whole_year_taken_by' => ?string,
- *          'terms' => [1 => ['open' => [...subset of ALL/M/F...], 'taken' => ['M'=>name,...]], 2 => [...], 3 => [...]]]
- * — 'terms' is empty when the whole year is either open or taken as one unit, since the
- * business rule (see sst_scope_conflict()) never lets term_scope=0 coexist with per-term rows.
+ * @param array<int,array{id:int,term_scope:int,sex_scope:string,teacher_name:string}> $rowsForBucket
+ * @param array<int,array{id:int,sex:string,full_name:string}> $roster
+ * @return array{covered_by: array<int,string>, uncovered_ids: array<int,int>, quick_open: array<int,string>, mix_available: bool}
+ */
+function term_bucket_availability(PDO $pdo, int $sectionId, array $rowsForBucket, array $roster): array
+{
+    $coveredBy = [];
+    foreach ($rowsForBucket as $row) {
+        foreach (resolve_covered_student_ids($pdo, $sectionId, $row['sex_scope'], (int) $row['id']) as $sid) {
+            $coveredBy[$sid] = $row['teacher_name'];
+        }
+    }
+
+    $allIds = array_column($roster, 'id');
+    $maleIds = array_column(array_filter($roster, fn($s) => $s['sex'] === 'M'), 'id');
+    $femaleIds = array_column(array_filter($roster, fn($s) => $s['sex'] === 'F'), 'id');
+    $coveredIds = array_keys($coveredBy);
+
+    $quickOpen = [];
+    if (!array_intersect($allIds, $coveredIds)) {
+        $quickOpen[] = 'ALL';
+    }
+    if (!array_intersect($maleIds, $coveredIds)) {
+        $quickOpen[] = 'M';
+    }
+    if (!array_intersect($femaleIds, $coveredIds)) {
+        $quickOpen[] = 'F';
+    }
+
+    $uncoveredIds = array_values(array_diff($allIds, $coveredIds));
+
+    return [
+        'covered_by' => $coveredBy,
+        'uncovered_ids' => $uncoveredIds,
+        'quick_open' => $quickOpen,
+        'mix_available' => (bool) $uncoveredIds,
+    ];
+}
+
+/**
+ * Read-only display helper for the self-claim UI (teacher/claim.php) and admin/assignments.php's
+ * Mix picker: reports which parts of a (section, subject, school year) are still open to claim
+ * vs. already taken, per term-mode bucket. This is NEVER the write-time authority —
+ * sst_scope_conflict() re-validates at submit time regardless of what this returns, since a
+ * slot shown open here can be claimed by someone else microseconds later.
+ *
+ * Returns ['mode' => 'whole_year'|'per_term'|'fresh', 'whole_year' => bucket|null,
+ *          'terms' => [1 => bucket, 2 => bucket, 3 => bucket]] where each bucket is
+ * term_bucket_availability()'s return shape. 'fresh' means nothing at all has been claimed yet
+ * — both a whole-year claim and per-term claims are still genuinely open choices, since the
+ * business rule (see sst_scope_conflict()) never lets term_scope=0 coexist with per-term rows
+ * once one exists.
  */
 function claim_availability(PDO $pdo, int $sectionId, int $subjectId, int $schoolYearId): array
 {
-    $stmt = $pdo->prepare('SELECT sst.term_scope, sst.sex_scope, u.full_name AS teacher_name
+    $stmt = $pdo->prepare('SELECT sst.id, sst.term_scope, sst.sex_scope, u.full_name AS teacher_name
         FROM section_subject_teachers sst
         JOIN users u ON u.id = sst.teacher_id
         WHERE sst.section_id = ? AND sst.subject_id = ? AND sst.school_year_id = ? AND sst.is_active = 1');
     $stmt->execute([$sectionId, $subjectId, $schoolYearId]);
     $rows = $stmt->fetchAll();
 
-    if (!$rows) {
-        return ['whole_year_open' => true, 'whole_year_taken_by' => null, 'terms' => []];
-    }
+    $rosterStmt = $pdo->prepare("SELECT id, sex, full_name FROM students WHERE section_id = ? AND is_active = 1 ORDER BY FIELD(sex, 'M', 'F'), full_name");
+    $rosterStmt->execute([$sectionId]);
+    $roster = $rosterStmt->fetchAll();
 
-    foreach ($rows as $row) {
-        if ((int) $row['term_scope'] === 0) {
-            return ['whole_year_open' => false, 'whole_year_taken_by' => $row['teacher_name'], 'terms' => []];
-        }
+    $wholeYearRows = array_values(array_filter($rows, fn($r) => (int) $r['term_scope'] === 0));
+    if ($wholeYearRows) {
+        return ['mode' => 'whole_year', 'whole_year' => term_bucket_availability($pdo, $sectionId, $wholeYearRows, $roster), 'terms' => []];
+    }
+    if (!$rows) {
+        $empty = term_bucket_availability($pdo, $sectionId, [], $roster);
+        return ['mode' => 'fresh', 'whole_year' => $empty, 'terms' => [1 => $empty, 2 => $empty, 3 => $empty]];
     }
 
     $terms = [];
     for ($t = 1; $t <= 3; $t++) {
-        $taken = [];
-        foreach ($rows as $row) {
-            if ((int) $row['term_scope'] === $t) {
-                $taken[$row['sex_scope']] = $row['teacher_name'];
-            }
-        }
-        $open = isset($taken['ALL']) ? [] : array_values(array_diff(['ALL', 'M', 'F'], array_keys($taken)));
-        if ($taken && !isset($taken['ALL'])) {
-            // Once one sex is claimed, "All Students" is no longer offered for this term —
-            // it would conflict with the half already taken.
-            $open = array_values(array_diff($open, ['ALL']));
-        }
-        $terms[$t] = ['open' => $open, 'taken' => $taken];
+        $terms[$t] = term_bucket_availability($pdo, $sectionId, array_values(array_filter($rows, fn($r) => (int) $r['term_scope'] === $t)), $roster);
     }
+    return ['mode' => 'per_term', 'whole_year' => null, 'terms' => $terms];
+}
 
-    return ['whole_year_open' => false, 'whole_year_taken_by' => null, 'terms' => $terms];
+/**
+ * Renders the Male-then-Female-grouped checkbox list shared by teacher/claim.php's Mix modals
+ * and admin/assignments.php's inline Mix picker — the only actual reusable unit between those
+ * two UIs (admin's isn't a modal, since its form is free-choice at submit time; see the plan).
+ * Already-covered students render disabled with "Taken by {name}"; $checkedIds pre-checks
+ * (used when editing an existing Mix row). $formPrefix namespaces the input name so multiple
+ * pickers can coexist on one page (e.g. one per term) without colliding.
+ *
+ * @param array<int,array{id:int,sex:string,full_name:string}> $roster
+ * @param array<int,string> $coveredBy student_id => teacher_name
+ * @param array<int,int> $checkedIds
+ */
+function render_student_picker(array $roster, array $coveredBy, array $checkedIds, string $formPrefix): string
+{
+    $checkedSet = array_flip($checkedIds);
+    $lastSex = null;
+    $html = '';
+    foreach ($roster as $student) {
+        if ($student['sex'] !== $lastSex) {
+            $lastSex = $student['sex'];
+            $label = $student['sex'] === 'M' ? 'Male' : 'Female';
+            $html .= '<div class="text-xs font-semibold text-slate-500 uppercase tracking-wide mt-3 mb-1">' . h($label) . '</div>';
+        }
+        $sid = (int) $student['id'];
+        $taken = $coveredBy[$sid] ?? null;
+        $checked = isset($checkedSet[$sid]) ? ' checked' : '';
+        $disabled = $taken !== null ? ' disabled' : '';
+        $html .= '<label class="flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm ' . ($taken !== null ? 'text-slate-400' : 'hover:bg-slate-50') . '">'
+            . '<input type="checkbox" name="' . h($formPrefix) . '[]" value="' . $sid . '"' . $checked . $disabled . '>'
+            . '<span>' . h($student['full_name']) . '</span>'
+            . ($taken !== null ? '<span class="text-xs text-slate-400 ml-auto">Taken by ' . h($taken) . '</span>' : '')
+            . '</label>';
+    }
+    return $html;
 }
 
 /**

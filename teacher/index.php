@@ -52,6 +52,19 @@ $assignments = array_values($assignments);
 // actually covered by a different sst row.
 $statusStmt = $pdo->prepare('SELECT status FROM submission_status WHERE section_subject_teacher_id = ? AND term = ?');
 
+// A MIX card's student count can span more than one sst row (e.g. a different pick per term),
+// so it's resolved from the group's own distinct term_sst ids rather than assumed to be one row.
+$mixClaimCount = function (array $sstIds) use ($pdo): int {
+    $sstIds = array_values(array_unique(array_filter($sstIds)));
+    if (!$sstIds) {
+        return 0;
+    }
+    $placeholders = implode(',', array_fill(0, count($sstIds), '?'));
+    $stmt = $pdo->prepare("SELECT COUNT(DISTINCT student_id) FROM sst_student_claims WHERE section_subject_teacher_id IN ($placeholders)");
+    $stmt->execute($sstIds);
+    return (int) $stmt->fetchColumn();
+};
+
 // Cycled per card, purely decorative — gives each class its own visual identity at a glance.
 $cardThemes = [
     ['gradient' => 'from-violet-300 to-purple-200', 'icon' => 'map-pin', 'text' => 'text-violet-700'],
@@ -87,7 +100,15 @@ render_header('My Classes', 'Manage and monitor the progress of your classes.');
       <div class="w-10 h-10 rounded-full bg-white/60 flex items-center justify-center <?= $theme['text'] ?>"><?= icon_svg($theme['icon'], 'w-5 h-5') ?></div>
     </div>
     <div class="p-6">
-      <div class="font-semibold text-slate-800 mb-1"><?= h($a['subject_name']) ?><?php if ($a['sex_scope'] !== 'ALL'): ?> <span class="font-normal text-xs text-slate-400">(<?= $a['sex_scope'] === 'M' ? 'Male' : 'Female' ?> only)</span><?php endif; ?></div>
+      <?php
+        $scopeLabel = match ($a['sex_scope']) {
+            'M' => 'Male only',
+            'F' => 'Female only',
+            'MIX' => 'Mix — ' . $mixClaimCount($a['term_sst']) . ' students',
+            default => null,
+        };
+      ?>
+      <div class="font-semibold text-slate-800 mb-1"><?= h($a['subject_name']) ?><?php if ($scopeLabel !== null): ?> <span class="font-normal text-xs text-slate-400">(<?= h($scopeLabel) ?>)</span><?php endif; ?></div>
       <div class="text-xs font-medium mb-4 <?= $theme['text'] ?>"><?= h($a['grade_level'] . ' - ' . $a['section_name']) ?></div>
       <div class="flex flex-col gap-2">
         <?php for ($t = 1; $t <= 3; $t++): $sstId = $a['term_sst'][$t]; ?>

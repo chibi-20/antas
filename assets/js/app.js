@@ -1,9 +1,15 @@
 // Shared light JS enhancements: confirm dialogs, searchable person-picker dropdowns,
 // live grade preview (class_record.php). Print pagination (card_slips.php) is pure CSS.
 
-document.querySelectorAll('[data-confirm]').forEach(function (el) {
-  el.addEventListener('submit', function (e) {
-    if (!confirm(el.getAttribute('data-confirm'))) {
+// A form's own data-confirm covers the common case (one submit button, one prompt). A form
+// with more than one submit button (e.g. class_record.php's Save Scores vs. Save & Submit for
+// Review) instead puts data-confirm on the specific button that should prompt — e.submitter
+// tells us which button actually triggered this submit, so only that one asks. Listening on
+// every form is harmless: the confirm only fires when a message is actually found.
+document.querySelectorAll('form').forEach(function (form) {
+  form.addEventListener('submit', function (e) {
+    var message = (e.submitter && e.submitter.getAttribute('data-confirm')) || form.getAttribute('data-confirm');
+    if (message && !confirm(message)) {
       e.preventDefault();
     }
   });
@@ -411,6 +417,76 @@ function initGridArrowNav() {
         target.focus();
         target.select();
       }
+    });
+  });
+}
+
+/**
+ * Opens/closes the Mix student-picker modals on teacher/claim.php and admin/assignments.php.
+ * One event-delegated DOMContentLoaded listener (no per-instance handlers) — a page can have
+ * several pre-rendered modals (one per term-mode panel), each toggled purely via its own
+ * hidden/flex class, no AJAX. Closes on the Cancel button or a click directly on the dark
+ * backdrop (not on clicks inside the panel itself, which would otherwise close it while
+ * someone's mid-click on a checkbox near the edge).
+ */
+function initMixPicker() {
+  document.addEventListener('click', function (e) {
+    var opener = e.target.closest('[data-mix-modal-target]');
+    if (opener) {
+      var modal = document.getElementById(opener.getAttribute('data-mix-modal-target'));
+      if (modal) {
+        modal.classList.remove('hidden');
+      }
+      return;
+    }
+    var closer = e.target.closest('[data-mix-modal-close]');
+    if (closer) {
+      var modalToClose = closer.closest('[data-mix-modal]');
+      if (modalToClose) {
+        modalToClose.classList.add('hidden');
+      }
+      return;
+    }
+    if (e.target.hasAttribute('data-mix-modal')) {
+      // Direct click on the backdrop itself (event target === the modal root, not a descendant).
+      e.target.classList.add('hidden');
+    }
+  });
+}
+
+/**
+ * teacher/claim.php's "Whole School Year vs. By Term" toggle — only shown for a section where
+ * nothing has been claimed yet (claim_availability()'s 'fresh' mode), since that's the only
+ * state where both are still genuinely open choices. Each toggle group is one container
+ * carrying data-claim-mode-toggle="<prefix>"; its two buttons carry
+ * data-claim-mode-btn="<prefix>-year"/"<prefix>-term", and the two sibling panels carry the
+ * matching data-claim-mode-panel attribute.
+ */
+function initClaimModeToggle() {
+  document.querySelectorAll('[data-claim-mode-toggle]').forEach(function (toggle) {
+    var prefix = toggle.getAttribute('data-claim-mode-toggle');
+    var buttons = toggle.querySelectorAll('[data-claim-mode-btn]');
+    var panels = document.querySelectorAll('[data-claim-mode-panel^="' + prefix + '-"]');
+
+    function activate(target) {
+      panels.forEach(function (panel) {
+        panel.classList.toggle('hidden', panel.getAttribute('data-claim-mode-panel') !== target);
+      });
+      buttons.forEach(function (btn) {
+        var active = btn.getAttribute('data-claim-mode-btn') === target;
+        btn.classList.toggle('bg-accent-600', active);
+        btn.classList.toggle('text-white', active);
+        btn.classList.toggle('bg-white', !active);
+        btn.classList.toggle('border', !active);
+        btn.classList.toggle('border-slate-200', !active);
+        btn.classList.toggle('text-slate-600', !active);
+      });
+    }
+
+    buttons.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        activate(btn.getAttribute('data-claim-mode-btn'));
+      });
     });
   });
 }
