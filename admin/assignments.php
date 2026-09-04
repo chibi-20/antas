@@ -113,8 +113,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } elseif ($action === 'toggle_active') {
         $id = (int) $_POST['id'];
-        $pdo->prepare('UPDATE section_subject_teachers SET is_active = NOT is_active WHERE id = ?')->execute([$id]);
-        flash_set('success', 'Status updated.');
+        try {
+            // retired_dedup_id must move with is_active (0 while active, this row's own id
+            // once retired) so the unique key never lets a deactivated row block reuse of its
+            // slot, nor two simultaneously-active rows share one — see
+            // db/migrations/0016_fix_deactivated_slot_reuse.sql. "is_active" on the right of
+            // retired_dedup_id's CASE refers to the NEW (just-flipped) value, per MySQL's
+            // left-to-right multi-column UPDATE evaluation.
+            $pdo->prepare('UPDATE section_subject_teachers SET is_active = NOT is_active, retired_dedup_id = CASE WHEN is_active THEN 0 ELSE id END WHERE id = ?')->execute([$id]);
+            flash_set('success', 'Status updated.');
+        } catch (PDOException $e) {
+            // Reactivating this row would collide with another assignment that already
+            // actively covers the exact same section/subject/year/term/scope.
+            flash_set('error', 'Could not reactivate — another active assignment already covers this exact section/subject/term/scope. Deactivate that one first.');
+        }
     } elseif ($action === 'eligibility_create') {
         $teacherId = (int) ($_POST['teacher_id'] ?? 0);
         $subjectId = (int) ($_POST['subject_id'] ?? 0);
