@@ -23,6 +23,20 @@ function url(string $path = '/'): string
     return rtrim(config()['base_path'], '/') . '/' . ltrim($path, '/');
 }
 
+/**
+ * Same as url(), but appends a ?v=<mtime> cache-buster for a static asset (CSS/JS) — without
+ * this, a browser that already cached app.js/app.css keeps serving the stale copy indefinitely
+ * after a deploy (no Cache-Control revalidation is configured), silently breaking any page that
+ * calls a newly-added JS function. Auto-updates whenever the file changes on disk; no manual
+ * version bump needed.
+ */
+function versioned_url(string $path): string
+{
+    $fsPath = __DIR__ . '/..' . '/' . ltrim($path, '/');
+    $version = file_exists($fsPath) ? (string) filemtime($fsPath) : (string) time();
+    return url($path) . '?v=' . $version;
+}
+
 function redirect(string $path): never
 {
     header('Location: ' . url($path));

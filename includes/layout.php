@@ -206,7 +206,7 @@ tailwind.config = {
   }
 }
 </script>
-<link rel="stylesheet" href="<?= htmlspecialchars(url('/assets/css/app.css')) ?>">
+<link rel="stylesheet" href="<?= htmlspecialchars(versioned_url('/assets/css/app.css')) ?>">
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen no-print">
 <?php if ($user): ?>
@@ -285,7 +285,7 @@ function render_footer(): void
   </div>
 </div>
 <?php endif; ?>
-<script src="<?= htmlspecialchars(url('/assets/js/app.js')) ?>"></script>
+<script src="<?= htmlspecialchars(versioned_url('/assets/js/app.js')) ?>"></script>
 </body>
 </html>
     <?php
