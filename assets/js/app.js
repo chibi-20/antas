@@ -85,6 +85,24 @@ function initTopScrollbar(topId, bottomId, spacerId) {
 })();
 
 /**
+ * admin/assignments.php's own dedicated teacher search (#assignment-teacher-search) — kept
+ * fully separate from the shared #page-search/.searchable-item mechanism above so this page's
+ * filtering can never be affected by (or accidentally affect) any other page's use of that
+ * shared box. Same simple show/hide-by-substring logic, just scoped to its own elements.
+ */
+function initAssignmentTeacherSearch() {
+  var input = document.getElementById('assignment-teacher-search');
+  if (!input) return;
+  input.addEventListener('input', function () {
+    var q = input.value.trim().toLowerCase();
+    document.querySelectorAll('.js-assignment-teacher-card').forEach(function (el) {
+      var haystack = (el.dataset.search || el.textContent).toLowerCase();
+      el.classList.toggle('hidden', q !== '' && haystack.indexOf(q) === -1);
+    });
+  });
+}
+
+/**
  * Progressively enhances <select class="js-searchable"> into a searchable combobox —
  * useful once a person-picker (teacher/adviser/head teacher) has enough entries that
  * scrolling a plain <select> gets tedious (e.g. a division-wide deployment). The real

@@ -511,10 +511,14 @@ render_header('Subject Assignments');
 <div class="bg-white border border-slate-200 rounded-xl shadow-sm px-4 py-8 text-center text-slate-400 text-sm">No assignments yet — only eligibility tags.</div>
 <?php endif; ?>
 <?php else: ?>
+<div class="mb-4 max-w-sm">
+  <input type="text" id="assignment-teacher-search" placeholder="Search teachers…" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+</div>
 <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
   <?php foreach ($teacherSummaries as $t): ?>
   <a href="<?= h(url('/admin/assignments.php?teacher_id=' . $t['teacher_id'])) ?>"
-     class="block bg-white border border-slate-200 rounded-xl shadow-sm p-5 hover:border-accent-300 hover:shadow-md transition-shadow">
+     class="js-assignment-teacher-card block bg-white border border-slate-200 rounded-xl shadow-sm p-5 hover:border-accent-300 hover:shadow-md transition-shadow"
+     data-search="<?= h($t['teacher_name']) ?>">
     <div class="flex items-center gap-3 mb-4">
       <div class="w-11 h-11 rounded-full <?= avatar_color($t['teacher_id']) ?> text-white flex items-center justify-center text-sm font-semibold flex-shrink-0"><?= h(avatar_initials($t['teacher_name'])) ?></div>
       <div class="min-w-0">
@@ -535,5 +539,10 @@ render_header('Subject Assignments');
   <div class="text-slate-400 text-sm">No assignments yet.</div>
   <?php endif; ?>
 </div>
+<script>
+window.addEventListener('DOMContentLoaded', function () {
+  initAssignmentTeacherSearch();
+});
+</script>
 <?php endif; ?>
 <?php render_footer(); ?>
