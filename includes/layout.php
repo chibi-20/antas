@@ -261,7 +261,7 @@ tailwind.config = {
 <?php endif; ?>
     <?php foreach (flash_take() as $flash): ?>
       <div class="mb-4 mx-auto max-w-md px-4 py-3 rounded-lg text-sm <?= $flash['type'] === 'error' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200' ?>">
-        <?= htmlspecialchars($flash['message']) ?>
+        <?= nl2br(htmlspecialchars($flash['message'])) ?>
       </div>
     <?php endforeach; ?>
     <?php

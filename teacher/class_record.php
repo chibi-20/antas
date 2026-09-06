@@ -16,6 +16,54 @@ assert_covers_term($assignment, $term, '/teacher/index.php',
     "You don't teach {$assignment['subject_name']} for {$assignment['grade_level']} - {$assignment['section_name']} in Term $term — here are your classes.");
 $pdo = db();
 
+// Male-then-Female, alphabetical within each — the standard class record roster order.
+// Restricted to this assignment's sex_scope (e.g. a boys-only TLE assignment never shows
+// girls, even though they share a section_id). Resolved up here (rather than just before
+// rendering, where it used to live) so the POST handler below can also use it — needed to
+// check for missing scores before allowing "Save & Submit for Review" to go through.
+$sexScope = strtoupper(trim((string) ($assignment['sex_scope'] ?? 'ALL')));
+
+if ($sexScope === 'ALL') {
+    $studentsStmt = $pdo->prepare("
+        SELECT *
+        FROM students
+        WHERE section_id = ?
+          AND is_active = 1
+        ORDER BY FIELD(sex, 'M', 'F'), full_name
+    ");
+
+    $studentsStmt->execute([
+        $assignment['section_id'],
+    ]);
+} elseif ($sexScope === 'MIX') {
+    // No section/sex filter needed at all — sst_student_claims already scopes exactly to
+    // this assignment.
+    $studentsStmt = $pdo->prepare("
+        SELECT st.*
+        FROM students st
+        JOIN sst_student_claims ssc ON ssc.student_id = st.id AND ssc.section_subject_teacher_id = ?
+        WHERE st.is_active = 1
+        ORDER BY FIELD(st.sex, 'M', 'F'), st.full_name
+    ");
+    $studentsStmt->execute([$sstId]);
+} else {
+    $studentsStmt = $pdo->prepare("
+        SELECT *
+        FROM students
+        WHERE section_id = ?
+          AND is_active = 1
+          AND sex = ?
+        ORDER BY FIELD(sex, 'M', 'F'), full_name
+    ");
+
+    $studentsStmt->execute([
+        $assignment['section_id'],
+        $sexScope,
+    ]);
+}
+
+$students = $studentsStmt->fetchAll();
+
 $statusStmt = $pdo->prepare('SELECT * FROM submission_status WHERE section_subject_teacher_id = ? AND term = ?');
 $statusStmt->execute([$sstId, $term]);
 $submission = $statusStmt->fetch();
@@ -135,7 +183,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // two used to be independent, and a teacher who clicked Submit without clicking Save
         // Scores first would lock the term with none of their scores ever persisted.
         $submitForReview = ($_POST['post_action'] ?? '') === 'submit_for_review';
-        if ($submitForReview && !$rejected) {
+        $incomplete = $submitForReview && !$rejected ? find_incomplete_graded_items($pdo, $sstId, $term, $students) : [];
+        if ($submitForReview && !$rejected && $incomplete) {
+            // Grouped by student (one line each, every missing item listed together) rather
+            // than one line per student/item pair — repeating the same name for each gap it's
+            // still hard to scan once a student is missing more than one score.
+            $itemsByStudent = [];
+            foreach ($incomplete as $i) {
+                $itemsByStudent[$i['student_name']][] = $i['item_name'];
+            }
+            $lines = [];
+            foreach ($itemsByStudent as $studentName => $itemNames) {
+                $lines[] = "• $studentName — " . implode(', ', $itemNames);
+            }
+            flash_set('error', "Can't submit yet — the following have no score for an item the rest of the class already has one for (enter 0 if they didn't complete it):\n"
+                . implode("\n", $lines));
+        } elseif ($submitForReview && !$rejected) {
             $currentStatus = $pdo->prepare('SELECT status FROM submission_status WHERE section_subject_teacher_id = ? AND term = ?');
             $currentStatus->execute([$sstId, $term]);
             $statusNow = $currentStatus->fetchColumn();
@@ -210,52 +273,6 @@ foreach (['WW', 'PT', 'EX'] as $type) {
         $itemColumns[$item['id']] = $col++;
     }
 }
-
-// Male-then-Female, alphabetical within each — the standard class record roster order.
-// Restricted to this assignment's sex_scope (e.g. a boys-only TLE assignment never shows
-// girls, even though they share a section_id).
-$sexScope = strtoupper(trim((string) ($assignment['sex_scope'] ?? 'ALL')));
-
-if ($sexScope === 'ALL') {
-    $studentsStmt = $pdo->prepare("
-        SELECT *
-        FROM students
-        WHERE section_id = ?
-          AND is_active = 1
-        ORDER BY FIELD(sex, 'M', 'F'), full_name
-    ");
-
-    $studentsStmt->execute([
-        $assignment['section_id'],
-    ]);
-} elseif ($sexScope === 'MIX') {
-    // No section/sex filter needed at all — sst_student_claims already scopes exactly to
-    // this assignment.
-    $studentsStmt = $pdo->prepare("
-        SELECT st.*
-        FROM students st
-        JOIN sst_student_claims ssc ON ssc.student_id = st.id AND ssc.section_subject_teacher_id = ?
-        WHERE st.is_active = 1
-        ORDER BY FIELD(st.sex, 'M', 'F'), st.full_name
-    ");
-    $studentsStmt->execute([$sstId]);
-} else {
-    $studentsStmt = $pdo->prepare("
-        SELECT *
-        FROM students
-        WHERE section_id = ?
-          AND is_active = 1
-          AND sex = ?
-        ORDER BY FIELD(sex, 'M', 'F'), full_name
-    ");
-
-    $studentsStmt->execute([
-        $assignment['section_id'],
-        $sexScope,
-    ]);
-}
-
-$students = $studentsStmt->fetchAll();
 
 $scoreLookup = [];
 if ($items) {

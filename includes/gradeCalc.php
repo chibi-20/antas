@@ -305,3 +305,68 @@ if ($sexScope === 'ALL') {
         }
     }
 }
+
+/**
+ * Finds students still missing a score for an assessment item that's otherwise already been
+ * graded for the class — the "forgot to grade this one" gap that "Save & Submit for Review"
+ * blocks on. Doesn't change how grades are computed at all (a blank still just excludes itself
+ * from the running average everywhere else); this is purely a submission-time check so a
+ * teacher can't lock in a term with a gap they didn't notice, without the system ever guessing
+ * a score on their behalf.
+ *
+ * An item nobody has any score for yet (never administered) is deliberately excluded — that's
+ * normal mid-term, not a gap. "Has a score" means an explicit non-null raw_score for at least
+ * one covered student; a row with raw_score IS NULL (a cell that was filled in and then
+ * cleared) counts the same as no row at all.
+ *
+ * Returns [['student_name' => ..., 'item_name' => ...], ...], empty when nothing needs
+ * attention.
+ *
+ * @param array<int,array{id:int,full_name:string}> $students the assignment's own covered roster
+ * @return array<int,array{student_name:string,item_name:string}>
+ */
+function find_incomplete_graded_items(PDO $pdo, int $sstId, int $term, array $students): array
+{
+    if (!$students) {
+        return [];
+    }
+
+    $items = $pdo->prepare('SELECT id, item_name FROM assessment_items WHERE section_subject_teacher_id = ? AND term = ?');
+    $items->execute([$sstId, $term]);
+    $items = $items->fetchAll();
+    if (!$items) {
+        return [];
+    }
+
+    $itemIds = array_column($items, 'id');
+    $placeholders = implode(',', array_fill(0, count($itemIds), '?'));
+    $scoreStmt = $pdo->prepare("SELECT assessment_item_id, student_id, raw_score FROM student_scores WHERE assessment_item_id IN ($placeholders)");
+    $scoreStmt->execute($itemIds);
+    $scoresByItem = [];
+    foreach ($scoreStmt->fetchAll() as $row) {
+        $scoresByItem[(int) $row['assessment_item_id']][(int) $row['student_id']] = $row['raw_score'];
+    }
+
+    $incomplete = [];
+    foreach ($items as $item) {
+        $itemId = (int) $item['id'];
+        $studentScores = $scoresByItem[$itemId] ?? [];
+        $hasAnyScore = false;
+        foreach ($studentScores as $value) {
+            if ($value !== null) {
+                $hasAnyScore = true;
+                break;
+            }
+        }
+        if (!$hasAnyScore) {
+            continue;
+        }
+        foreach ($students as $student) {
+            $sid = (int) $student['id'];
+            if (($studentScores[$sid] ?? null) === null) {
+                $incomplete[] = ['student_name' => $student['full_name'], 'item_name' => $item['item_name']];
+            }
+        }
+    }
+    return $incomplete;
+}
