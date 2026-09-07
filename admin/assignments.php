@@ -53,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             try {
                 $pdo->beginTransaction();
-                $pdo->prepare('INSERT INTO section_subject_teachers (section_id, subject_id, teacher_id, school_year_id, term_scope, sex_scope) VALUES (?, ?, ?, ?, ?, ?)')
+                $pdo->prepare("INSERT INTO section_subject_teachers (section_id, subject_id, teacher_id, created_via, school_year_id, term_scope, sex_scope) VALUES (?, ?, ?, 'admin', ?, ?, ?)")
                     ->execute([$sectionId, $subjectId, $teacherId, $schoolYearId, $termScope, $sexScope]);
                 $sstId = (int) $pdo->lastInsertId();
                 if ($sexScope === 'MIX') {
@@ -449,6 +449,60 @@ render_header('Subject Assignments');
     </form>
   </div>
 </details>
+
+<details class="mb-6">
+  <summary class="cursor-pointer select-none text-sm text-slate-500 hover:text-slate-700 mb-2">Or find who's teaching a section</summary>
+  <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6 mt-2">
+    <p class="text-xs text-slate-400 mb-3">Every assignment across every teacher, searchable by section, subject, or teacher — useful for tracing a section that was self-claimed by the wrong teacher.</p>
+    <input type="text" id="section-lookup-search" placeholder="Search by section, subject, or teacher…" class="w-full max-w-sm mb-4 px-3 py-2 border border-slate-300 rounded-lg text-sm">
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-slate-50 text-slate-500 text-xs uppercase">
+          <tr>
+            <th class="text-left px-4 py-3">Year</th>
+            <th class="text-left px-4 py-3">Section</th>
+            <th class="text-left px-4 py-3">Subject</th>
+            <th class="text-left px-4 py-3">Teacher</th>
+            <th class="text-left px-4 py-3">Term</th>
+            <th class="text-left px-4 py-3">Applies To</th>
+            <th class="text-left px-4 py-3">Origin</th>
+            <th class="text-left px-4 py-3">Status</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          <?php foreach ($assignments as $a): ?>
+          <tr class="js-section-lookup-row" data-search="<?= h($a['grade_level'] . ' ' . $a['section_name'] . ' ' . $a['subject_name'] . ' ' . $a['teacher_name']) ?>">
+            <td class="px-4 py-3 text-slate-500"><?= h($a['year_label']) ?></td>
+            <td class="px-4 py-3 text-slate-600"><?= h($a['grade_level'] . ' - ' . $a['section_name']) ?></td>
+            <td class="px-4 py-3 font-medium"><?= h($a['subject_name']) ?></td>
+            <td class="px-4 py-3"><a href="<?= h(url('/admin/assignments.php?teacher_id=' . $a['teacher_id'])) ?>" class="text-accent-600 hover:underline"><?= h($a['teacher_name']) ?></a></td>
+            <td class="px-4 py-3 text-slate-500"><?= (int) $a['term_scope'] === 0 ? 'All Terms' : 'Term ' . (int) $a['term_scope'] ?></td>
+            <td class="px-4 py-3 text-slate-500"><?php
+              echo match ($a['sex_scope']) {
+                  'ALL' => 'All Students',
+                  'M' => 'Male Only',
+                  'F' => 'Female Only',
+                  'MIX' => 'Mix (' . (int) $a['mix_claim_count'] . ' students)',
+                  default => h($a['sex_scope']),
+              };
+            ?></td>
+            <td class="px-4 py-3"><?= $a['created_via'] === 'self_claim' ? '<span class="text-amber-600">Self-claimed</span>' : '<span class="text-slate-400">Admin</span>' ?></td>
+            <td class="px-4 py-3"><?= $a['is_active'] ? '<span class="text-emerald-600">Active</span>' : '<span class="text-slate-400">Inactive</span>' ?></td>
+          </tr>
+          <?php endforeach; ?>
+          <?php if (!$assignments): ?>
+          <tr><td colspan="8" class="px-4 py-6 text-center text-slate-400">No assignments yet.</td></tr>
+          <?php endif; ?>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</details>
+<script>
+window.addEventListener('DOMContentLoaded', function () {
+  initSectionLookupSearch();
+});
+</script>
 
 <?php if ($viewTeacherId && ($viewTeacherAssignments || $viewTeacherEligibility)): ?>
 <a href="<?= h(url('/admin/assignments.php')) ?>" class="inline-block mb-4 text-sm text-accent-600 hover:underline">&larr; Back to Teachers</a>

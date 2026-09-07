@@ -24,7 +24,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $created = 0;
     $skipped = [];
     $sectionLabelStmt = $pdo->prepare('SELECT gl.name AS grade_level, sec.section_name FROM sections sec JOIN grade_levels gl ON gl.id = sec.grade_level_id WHERE sec.id = ?');
-    $insertSst = $pdo->prepare('INSERT INTO section_subject_teachers (section_id, subject_id, teacher_id, school_year_id) VALUES (?, ?, ?, ?)');
+    $insertSst = $pdo->prepare("INSERT INTO section_subject_teachers (section_id, subject_id, teacher_id, created_via, school_year_id) VALUES (?, ?, ?, 'admin', ?)");
     $insertStatus = $pdo->prepare('INSERT INTO submission_status (section_subject_teacher_id, term, status) VALUES (?, ?, ?)');
 
     foreach ($sectionIds as $sectionId) {

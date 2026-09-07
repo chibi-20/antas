@@ -103,6 +103,24 @@ function initAssignmentTeacherSearch() {
 }
 
 /**
+ * admin/assignments.php's "Or find who's teaching a section" table (#section-lookup-search) —
+ * same isolated show/hide-by-substring approach as initAssignmentTeacherSearch() above, kept
+ * as its own function/elements so the two searches on this page never interfere with each
+ * other.
+ */
+function initSectionLookupSearch() {
+  var input = document.getElementById('section-lookup-search');
+  if (!input) return;
+  input.addEventListener('input', function () {
+    var q = input.value.trim().toLowerCase();
+    document.querySelectorAll('.js-section-lookup-row').forEach(function (el) {
+      var haystack = (el.dataset.search || el.textContent).toLowerCase();
+      el.classList.toggle('hidden', q !== '' && haystack.indexOf(q) === -1);
+    });
+  });
+}
+
+/**
  * Progressively enhances <select class="js-searchable"> into a searchable combobox —
  * useful once a person-picker (teacher/adviser/head teacher) has enough entries that
  * scrolling a plain <select> gets tedious (e.g. a division-wide deployment). The real

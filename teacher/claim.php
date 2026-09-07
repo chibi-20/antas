@@ -79,7 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($conflict) {
                 throw new RuntimeException($conflict);
             }
-            $pdo->prepare('INSERT INTO section_subject_teachers (section_id, subject_id, teacher_id, school_year_id, term_scope, sex_scope) VALUES (?, ?, ?, ?, ?, ?)')
+            $pdo->prepare("INSERT INTO section_subject_teachers (section_id, subject_id, teacher_id, created_via, school_year_id, term_scope, sex_scope) VALUES (?, ?, ?, 'self_claim', ?, ?, ?)")
                 ->execute([$sectionId, $subjectId, $user['id'], $year['id'], $termScope, $sexScope]);
             $sstId = (int) $pdo->lastInsertId();
             if ($sexScope === 'MIX') {
