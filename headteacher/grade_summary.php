@@ -19,9 +19,18 @@ if ($sectionId) {
     $section = require_supervised_section($sectionId, (int) $year['id']);
     $supervisedSubjectIds = get_supervised_subject_ids($user['id'], (int) $year['id']);
     $data = get_consolidated_data($sectionId, (int) $year['id'], $term);
-    // Only the subjects THIS Head Teacher supervises — a supervised MAPEH component still
-    // shows (it's this HT's own subject), everything else in the section is out of scope.
-    $data['subjects'] = array_values(array_filter($data['subjects'], fn($s) => in_array($s['subject_id'], $supervisedSubjectIds, true)));
+    // Only the subjects THIS Head Teacher supervises. For a supervised MAPEH component
+    // (Music-Arts/PE-Health), keep both the merged parent's averaged MAPEH column AND the
+    // two component columns right after it — get_consolidated_data() already returns each
+    // child immediately following its parent, in curriculum order, so no re-sorting is
+    // needed here.
+    $keepIds = [];
+    foreach ($data['subjects'] as $s) {
+        if (in_array($s['subject_id'], $supervisedSubjectIds, true)) {
+            $keepIds[] = $s['parent_subject_id'] ?? $s['subject_id'];
+        }
+    }
+    $data['subjects'] = array_values(array_filter($data['subjects'], fn($s) => in_array($s['parent_subject_id'] ?? $s['subject_id'], $keepIds, true)));
 
     render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · Grade Summary');
     echo ht_tab_nav('grade_summary');

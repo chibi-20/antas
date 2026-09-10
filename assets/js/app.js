@@ -6,6 +6,16 @@
 // Review) instead puts data-confirm on the specific button that should prompt — e.submitter
 // tells us which button actually triggered this submit, so only that one asks. Listening on
 // every form is harmless: the confirm only fires when a message is actually found.
+// Dark mode toggle (button lives in the sidebar, includes/layout.php). The actual dark/light
+// class is already applied before first paint by an inline script in <head> (reads the same
+// localStorage key) — this only handles it changing afterward.
+document.getElementById('theme-toggle')?.addEventListener('click', function () {
+  var isDark = document.documentElement.classList.toggle('dark');
+  try {
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+  } catch (e) {}
+});
+
 document.querySelectorAll('form').forEach(function (form) {
   form.addEventListener('submit', function (e) {
     var message = (e.submitter && e.submitter.getAttribute('data-confirm')) || form.getAttribute('data-confirm');
@@ -114,6 +124,24 @@ function initSectionLookupSearch() {
   input.addEventListener('input', function () {
     var q = input.value.trim().toLowerCase();
     document.querySelectorAll('.js-section-lookup-row').forEach(function (el) {
+      var haystack = (el.dataset.search || el.textContent).toLowerCase();
+      el.classList.toggle('hidden', q !== '' && haystack.indexOf(q) === -1);
+    });
+  });
+}
+
+/**
+ * admin/users.php's user list search (#user-search) — same isolated show/hide-by-substring
+ * approach as initAssignmentTeacherSearch()/initSectionLookupSearch() above, matching
+ * against each row's full name and username so an admin can find a teacher by either one
+ * (e.g. when they only remember the name, not the username they need for a password reset).
+ */
+function initUserSearch() {
+  var input = document.getElementById('user-search');
+  if (!input) return;
+  input.addEventListener('input', function () {
+    var q = input.value.trim().toLowerCase();
+    document.querySelectorAll('.js-user-search-row').forEach(function (el) {
       var haystack = (el.dataset.search || el.textContent).toLowerCase();
       el.classList.toggle('hidden', q !== '' && haystack.indexOf(q) === -1);
     });
@@ -316,7 +344,9 @@ function initGradePreview(config) {
       // 75, the DepEd passing mark) the moment it appears, not just after saving.
       var failing = transmuted !== null && transmuted < 75;
       transEl.classList.toggle('text-rose-600', failing);
+      transEl.classList.toggle('dark:text-rose-400', failing);
       transEl.classList.toggle('text-accent-700', !failing);
+      transEl.classList.toggle('dark:text-accent-400', !failing);
     }
   }
 
@@ -382,6 +412,14 @@ function initPasteGrid() {
           if (!target || target.disabled) return;
           target.value = rawValue.trim();
           target.dispatchEvent(new Event('input', { bubbles: true }));
+          // Brief highlight (#3) so a big Excel paste visibly confirms which cells just
+          // landed, before the page ever reloads — CSS animation defined in app.css.
+          target.classList.remove('js-just-pasted');
+          void target.offsetWidth; // restart the animation if the same cell is pasted into twice in a row
+          target.classList.add('js-just-pasted');
+          target.addEventListener('animationend', function () {
+            target.classList.remove('js-just-pasted');
+          }, { once: true });
         });
       });
     });
@@ -523,6 +561,51 @@ function initClaimModeToggle() {
       btn.addEventListener('click', function () {
         activate(btn.getAttribute('data-claim-mode-btn'));
       });
+    });
+  });
+}
+
+/**
+ * teacher/class_record.php's "Reasons for failing grades" block — shows the free-text
+ * textarea only when a student's reason `<select>` is set to "Other", matching whichever
+ * value was already saved on page load (server-rendered via the `hidden` class, not this
+ * function — this only handles it changing afterward).
+ */
+/**
+ * class_record.php's Excel-paste tip banner (#4) — starts hidden in the HTML (so a returning
+ * teacher who already dismissed it never sees even a brief flash of it) and this decides
+ * whether to actually show it, based on the same localStorage flag the dismiss button sets.
+ * One shared flag for every class record, not per-assignment — the tip's the same everywhere.
+ */
+function initDismissibleTip() {
+  var banner = document.getElementById('paste-tip-banner');
+  if (!banner) return;
+  var dismissKey = 'classRecordTipDismissed';
+  try {
+    if (!localStorage.getItem(dismissKey)) {
+      banner.classList.remove('hidden');
+    }
+  } catch (e) {
+    banner.classList.remove('hidden'); // localStorage unavailable — default to showing it
+  }
+  var dismissBtn = document.getElementById('paste-tip-dismiss');
+  if (dismissBtn) {
+    dismissBtn.addEventListener('click', function () {
+      banner.classList.add('hidden');
+      try {
+        localStorage.setItem(dismissKey, '1');
+      } catch (e) {}
+    });
+  }
+}
+
+function initFailReasonToggle() {
+  document.querySelectorAll('.js-fail-reason-select').forEach(function (select) {
+    var studentId = select.getAttribute('data-student-id');
+    var textarea = document.querySelector('.js-fail-reason-other[data-other-for="' + studentId + '"]');
+    if (!textarea) return;
+    select.addEventListener('change', function () {
+      textarea.classList.toggle('hidden', select.value !== 'other');
     });
   });
 }

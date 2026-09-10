@@ -370,3 +370,51 @@ function find_incomplete_graded_items(PDO $pdo, int $sstId, int $term, array $st
     }
     return $incomplete;
 }
+
+/**
+ * Finds students in the given roster whose CURRENT term grade for this subject/term is below
+ * 75 and have no saved reason yet (term_grade_fail_reasons) — the submission-time gate for the
+ * "why is this student failing" requirement, same shape/spirit as find_incomplete_graded_items()
+ * above: it doesn't change how grades are computed, it only blocks "Save & Submit for Review"
+ * until the gap is filled in, so a teacher can never lock in a failing grade with no reason on
+ * record. A student whose grade is >= 75 is never flagged, regardless of history — recovering
+ * above 75 on a later save means no reason is required anymore.
+ *
+ * Returns [['student_id' => ..., 'student_name' => ...], ...], empty when nothing needs
+ * attention.
+ *
+ * @param array<int,array{id:int,full_name:string}> $students the assignment's own covered roster
+ * @return array<int,array{student_id:int,student_name:string}>
+ */
+function find_missing_fail_reasons(PDO $pdo, int $subjectId, int $term, int $schoolYearId, array $students): array
+{
+    if (!$students) {
+        return [];
+    }
+
+    $studentIds = array_column($students, 'id');
+    $placeholders = implode(',', array_fill(0, count($studentIds), '?'));
+
+    $gradeStmt = $pdo->prepare("SELECT student_id, transmuted_grade FROM term_grades
+        WHERE subject_id = ? AND term = ? AND school_year_id = ? AND student_id IN ($placeholders)");
+    $gradeStmt->execute(array_merge([$subjectId, $term, $schoolYearId], $studentIds));
+    $gradeByStudent = [];
+    foreach ($gradeStmt->fetchAll() as $row) {
+        $gradeByStudent[(int) $row['student_id']] = $row['transmuted_grade'];
+    }
+
+    $reasonStmt = $pdo->prepare("SELECT student_id FROM term_grade_fail_reasons
+        WHERE subject_id = ? AND term = ? AND school_year_id = ? AND student_id IN ($placeholders)");
+    $reasonStmt->execute(array_merge([$subjectId, $term, $schoolYearId], $studentIds));
+    $hasReason = array_flip($reasonStmt->fetchAll(PDO::FETCH_COLUMN));
+
+    $missing = [];
+    foreach ($students as $student) {
+        $sid = (int) $student['id'];
+        $grade = $gradeByStudent[$sid] ?? null;
+        if ($grade !== null && (float) $grade < 75 && !isset($hasReason[$sid])) {
+            $missing[] = ['student_id' => $sid, 'student_name' => $student['full_name']];
+        }
+    }
+    return $missing;
+}

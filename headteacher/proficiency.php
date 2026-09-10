@@ -9,13 +9,38 @@ $pdo = db();
 $year = require_active_school_year();
 
 $supervisedSubjectIds = get_supervised_subject_ids($user['id'], (int) $year['id']);
+// A supervised MAPEH component (Music-Arts/PE-Health) offers one merged "MAPEH" option
+// instead of two separate ones — head_teacher_assignments always stores the COMPONENT ids
+// (see admin/head_teachers.php, which excludes compound parents from the assignable list),
+// never the compound parent's, so this has to be resolved here rather than assumed correct.
 $supervisedSubjects = [];
 if ($supervisedSubjectIds) {
     $placeholders = implode(',', array_fill(0, count($supervisedSubjectIds), '?'));
-    $stmt = $pdo->prepare("SELECT id, subject_name FROM subjects WHERE id IN ($placeholders) ORDER BY subject_name");
+    $stmt = $pdo->prepare("SELECT id, subject_name, parent_subject_id FROM subjects WHERE id IN ($placeholders)");
     $stmt->execute($supervisedSubjectIds);
-    $supervisedSubjects = $stmt->fetchAll();
+    $byId = [];
+    $parentIdsNeeded = [];
+    foreach ($stmt->fetchAll() as $r) {
+        if ($r['parent_subject_id'] !== null) {
+            $parentIdsNeeded[(int) $r['parent_subject_id']] = true;
+        } else {
+            $byId[(int) $r['id']] = $r['subject_name'];
+        }
+    }
+    if ($parentIdsNeeded) {
+        $ph = implode(',', array_fill(0, count($parentIdsNeeded), '?'));
+        $parentStmt = $pdo->prepare("SELECT id, subject_name FROM subjects WHERE id IN ($ph)");
+        $parentStmt->execute(array_keys($parentIdsNeeded));
+        foreach ($parentStmt->fetchAll() as $p) {
+            $byId[(int) $p['id']] = $p['subject_name'];
+        }
+    }
+    foreach ($byId as $id => $name) {
+        $supervisedSubjects[] = ['id' => $id, 'subject_name' => $name];
+    }
+    usort($supervisedSubjects, fn($a, $b) => strcmp($a['subject_name'], $b['subject_name']));
 }
+$supervisedSubjectPickerIds = array_column($supervisedSubjects, 'id');
 
 $subjectId = (int) ($_GET['subject_id'] ?? ($supervisedSubjects[0]['id'] ?? 0));
 $term = (int) ($_GET['term'] ?? 1);
@@ -48,55 +73,77 @@ $bandRanges = array_combine($bandLabels, array_column(PL_BANDS, 'range'));
 
 $perSection = [];
 $perGradeLevel = [];
-if ($subjectId && in_array($subjectId, $supervisedSubjectIds, true)) {
-    // A subject can have more than one sst row per section now (a different teacher each
-    // term, or split by sex — see db/migrations/0011_scoped_teacher_assignments.sql). Without
-    // the term_scope/sex_scope predicates on the students join, every student in the section
-    // would be joined to every matching sst row — double-counting a student when both an M
-    // and F row are published for a term, or counting a student against a grade their own
-    // (still-unpublished) teacher hasn't produced.
-    // UNION ALL of two plain queries rather than "(sst.sex_scope = 'ALL' OR sst.sex_scope =
-    // st.sex)" — that shape (a literal-string comparison OR'd with a column comparison in one
-    // expression) can throw "Illegal mix of collations" on some MySQL versions even when every
-    // column's stored collation genuinely matches (see db/fix_sex_scope_collation.php). The
-    // two branches are mutually exclusive by definition, so UNION ALL needs no de-duplication.
-    $stmt = $pdo->prepare('SELECT sec.id AS section_id, sec.section_name, gl.id AS grade_level_id, gl.name AS grade_level, gl.sort_order,
-            st.id AS student_id, st.sex, tg.transmuted_grade
-        FROM section_subject_teachers sst
-        JOIN sections sec ON sec.id = sst.section_id
-        JOIN grade_levels gl ON gl.id = sec.grade_level_id
-        JOIN students st ON st.section_id = sec.id AND st.is_active = 1
-        JOIN submission_status ss ON ss.section_subject_teacher_id = sst.id AND ss.term = ?
-        LEFT JOIN term_grades tg ON tg.student_id = st.id AND tg.subject_id = sst.subject_id AND tg.term = ? AND tg.school_year_id = sst.school_year_id
-        WHERE sst.subject_id = ? AND sst.school_year_id = ? AND sst.is_active = 1 AND ss.status = "published"
-          AND (sst.term_scope = 0 OR sst.term_scope = ?)
-          AND sst.sex_scope = "ALL"
-        UNION ALL
-        SELECT sec.id AS section_id, sec.section_name, gl.id AS grade_level_id, gl.name AS grade_level, gl.sort_order,
-            st.id AS student_id, st.sex, tg.transmuted_grade
-        FROM section_subject_teachers sst
-        JOIN sections sec ON sec.id = sst.section_id
-        JOIN grade_levels gl ON gl.id = sec.grade_level_id
-        JOIN students st ON st.section_id = sec.id AND st.is_active = 1 AND sst.sex_scope = st.sex
-        JOIN submission_status ss ON ss.section_subject_teacher_id = sst.id AND ss.term = ?
-        LEFT JOIN term_grades tg ON tg.student_id = st.id AND tg.subject_id = sst.subject_id AND tg.term = ? AND tg.school_year_id = sst.school_year_id
-        WHERE sst.subject_id = ? AND sst.school_year_id = ? AND sst.is_active = 1 AND ss.status = "published"
-          AND (sst.term_scope = 0 OR sst.term_scope = ?)
-        UNION ALL
-        SELECT sec.id AS section_id, sec.section_name, gl.id AS grade_level_id, gl.name AS grade_level, gl.sort_order,
-            st.id AS student_id, st.sex, tg.transmuted_grade
-        FROM section_subject_teachers sst
-        JOIN sections sec ON sec.id = sst.section_id
-        JOIN grade_levels gl ON gl.id = sec.grade_level_id
-        JOIN sst_student_claims ssc ON ssc.section_subject_teacher_id = sst.id
-        JOIN students st ON st.id = ssc.student_id AND st.is_active = 1
-        JOIN submission_status ss ON ss.section_subject_teacher_id = sst.id AND ss.term = ?
-        LEFT JOIN term_grades tg ON tg.student_id = st.id AND tg.subject_id = sst.subject_id AND tg.term = ? AND tg.school_year_id = sst.school_year_id
-        WHERE sst.subject_id = ? AND sst.school_year_id = ? AND sst.is_active = 1 AND ss.status = "published"
-          AND (sst.term_scope = 0 OR sst.term_scope = ?)
-          AND sst.sex_scope = "MIX"
-        ORDER BY sort_order, section_name');
-    $stmt->execute([$term, $term, $subjectId, $year['id'], $term, $term, $term, $subjectId, $year['id'], $term, $term, $term, $subjectId, $year['id'], $term]);
+if ($subjectId && in_array($subjectId, $supervisedSubjectPickerIds, true)) {
+    $childStmt = $pdo->prepare('SELECT id FROM subjects WHERE parent_subject_id = ?');
+    $childStmt->execute([$subjectId]);
+    $isCompound = (bool) $childStmt->fetchColumn();
+
+    if ($isCompound) {
+        // Merged subject (e.g. MAPEH) selected — reuse effective_term_grades directly rather
+        // than re-deriving per-component publish-gating here: that view already requires
+        // EVERY active component to be published before the merged parent's row appears (see
+        // its compound-parent UNION ALL branch, db/migrations/0015_mix_sex_scope.sql), and it
+        // already collapses ALL/M/F/MIX scope handling that the per-component query below has
+        // to branch on manually.
+        $stmt = $pdo->prepare('SELECT sec.id AS section_id, sec.section_name, gl.id AS grade_level_id, gl.name AS grade_level, gl.sort_order,
+                st.id AS student_id, st.sex, etg.transmuted_grade
+            FROM effective_term_grades etg
+            JOIN students st ON st.id = etg.student_id AND st.is_active = 1
+            JOIN sections sec ON sec.id = etg.section_id
+            JOIN grade_levels gl ON gl.id = sec.grade_level_id
+            WHERE etg.subject_id = ? AND etg.term = ? AND etg.school_year_id = ?
+            ORDER BY gl.sort_order, sec.section_name');
+        $stmt->execute([$subjectId, $term, $year['id']]);
+    } else {
+        // A subject can have more than one sst row per section now (a different teacher each
+        // term, or split by sex — see db/migrations/0011_scoped_teacher_assignments.sql). Without
+        // the term_scope/sex_scope predicates on the students join, every student in the section
+        // would be joined to every matching sst row — double-counting a student when both an M
+        // and F row are published for a term, or counting a student against a grade their own
+        // (still-unpublished) teacher hasn't produced.
+        // UNION ALL of two plain queries rather than "(sst.sex_scope = 'ALL' OR sst.sex_scope =
+        // st.sex)" — that shape (a literal-string comparison OR'd with a column comparison in one
+        // expression) can throw "Illegal mix of collations" on some MySQL versions even when every
+        // column's stored collation genuinely matches (see db/fix_sex_scope_collation.php). The
+        // two branches are mutually exclusive by definition, so UNION ALL needs no de-duplication.
+        $stmt = $pdo->prepare('SELECT sec.id AS section_id, sec.section_name, gl.id AS grade_level_id, gl.name AS grade_level, gl.sort_order,
+                st.id AS student_id, st.sex, tg.transmuted_grade
+            FROM section_subject_teachers sst
+            JOIN sections sec ON sec.id = sst.section_id
+            JOIN grade_levels gl ON gl.id = sec.grade_level_id
+            JOIN students st ON st.section_id = sec.id AND st.is_active = 1
+            JOIN submission_status ss ON ss.section_subject_teacher_id = sst.id AND ss.term = ?
+            LEFT JOIN term_grades tg ON tg.student_id = st.id AND tg.subject_id = sst.subject_id AND tg.term = ? AND tg.school_year_id = sst.school_year_id
+            WHERE sst.subject_id = ? AND sst.school_year_id = ? AND sst.is_active = 1 AND ss.status = "published"
+              AND (sst.term_scope = 0 OR sst.term_scope = ?)
+              AND sst.sex_scope = "ALL"
+            UNION ALL
+            SELECT sec.id AS section_id, sec.section_name, gl.id AS grade_level_id, gl.name AS grade_level, gl.sort_order,
+                st.id AS student_id, st.sex, tg.transmuted_grade
+            FROM section_subject_teachers sst
+            JOIN sections sec ON sec.id = sst.section_id
+            JOIN grade_levels gl ON gl.id = sec.grade_level_id
+            JOIN students st ON st.section_id = sec.id AND st.is_active = 1 AND sst.sex_scope = st.sex
+            JOIN submission_status ss ON ss.section_subject_teacher_id = sst.id AND ss.term = ?
+            LEFT JOIN term_grades tg ON tg.student_id = st.id AND tg.subject_id = sst.subject_id AND tg.term = ? AND tg.school_year_id = sst.school_year_id
+            WHERE sst.subject_id = ? AND sst.school_year_id = ? AND sst.is_active = 1 AND ss.status = "published"
+              AND (sst.term_scope = 0 OR sst.term_scope = ?)
+            UNION ALL
+            SELECT sec.id AS section_id, sec.section_name, gl.id AS grade_level_id, gl.name AS grade_level, gl.sort_order,
+                st.id AS student_id, st.sex, tg.transmuted_grade
+            FROM section_subject_teachers sst
+            JOIN sections sec ON sec.id = sst.section_id
+            JOIN grade_levels gl ON gl.id = sec.grade_level_id
+            JOIN sst_student_claims ssc ON ssc.section_subject_teacher_id = sst.id
+            JOIN students st ON st.id = ssc.student_id AND st.is_active = 1
+            JOIN submission_status ss ON ss.section_subject_teacher_id = sst.id AND ss.term = ?
+            LEFT JOIN term_grades tg ON tg.student_id = st.id AND tg.subject_id = sst.subject_id AND tg.term = ? AND tg.school_year_id = sst.school_year_id
+            WHERE sst.subject_id = ? AND sst.school_year_id = ? AND sst.is_active = 1 AND ss.status = "published"
+              AND (sst.term_scope = 0 OR sst.term_scope = ?)
+              AND sst.sex_scope = "MIX"
+            ORDER BY sort_order, section_name');
+        $stmt->execute([$term, $term, $subjectId, $year['id'], $term, $term, $term, $subjectId, $year['id'], $term, $term, $term, $subjectId, $year['id'], $term]);
+    }
 
     foreach ($stmt->fetchAll() as $row) {
         if ($row['transmuted_grade'] === null) {

@@ -40,7 +40,7 @@ function honor_classification(?float $average): ?string
  */
 function grade_display_class(?float $grade): string
 {
-    return $grade !== null && $grade < 75 ? 'text-rose-600 font-semibold' : '';
+    return $grade !== null && $grade < 75 ? 'text-rose-600 dark:text-rose-400 font-semibold' : '';
 }
 
 /**

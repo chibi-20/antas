@@ -178,6 +178,26 @@ if ($items) {
 $gradeStmt = $pdo->prepare('SELECT * FROM term_grades WHERE student_id = ? AND subject_id = ? AND term = ?');
 $componentLabels = ['WW' => 'Written Work', 'PT' => 'Performance Task', 'EX' => 'Examinations'];
 
+// Reasons a teacher recorded for a below-75 grade (see teacher/class_record.php) — this page
+// is already scoped to one exact subject/assignment, so unlike at_risk.php's cross-subject
+// view there's no compound-parent resolution needed: the reason is simply keyed to this
+// assignment's own subject_id.
+$failReasons = [];
+if ($students) {
+    $studentIds = array_column($students, 'id');
+    $placeholders = implode(',', array_fill(0, count($studentIds), '?'));
+    $reasonStmt = $pdo->prepare("SELECT student_id, reason, reason_other FROM term_grade_fail_reasons
+        WHERE subject_id = ? AND term = ? AND school_year_id = ? AND student_id IN ($placeholders)");
+    $reasonStmt->execute(array_merge([$assignment['subject_id'], $term, $assignment['school_year_id']], $studentIds));
+    foreach ($reasonStmt->fetchAll() as $r) {
+        $label = FAIL_REASON_LABELS[$r['reason']] ?? $r['reason'];
+        if ($r['reason'] === 'other' && $r['reason_other']) {
+            $label = $r['reason_other'];
+        }
+        $failReasons[(int) $r['student_id']] = $label;
+    }
+}
+
 // Prior terms' transmuted grade for THIS subject, so the reviewer sees the running record
 // (not just the currently selected term) once Term 2 or 3 is open.
 $priorGrades = [];
@@ -258,6 +278,7 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
         <?php if ($term === 3): ?>
           <th class="text-center px-3 py-3 whitespace-nowrap text-accent-600">Final Grade</th>
         <?php endif; ?>
+        <th class="text-left px-3 py-3">Reason (if below 75)</th>
       </tr>
     </thead>
     <tbody class="divide-y divide-slate-100">
@@ -286,6 +307,14 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
         <?php if ($term === 3): $fg = $finalGrades[$student['id']] ?? null; ?>
           <td class="px-3 py-2 text-center font-semibold <?= $fg !== null ? (grade_display_class((float) $fg) ?: 'text-accent-700') : 'text-accent-700' ?>"><?= $fg !== null ? h($fg) : '—' ?></td>
         <?php endif; ?>
+        <td class="px-3 py-2 text-left text-xs text-slate-500 max-w-[220px]">
+          <?php $reason = $failReasons[$student['id']] ?? null; ?>
+          <?php if ($grade && $grade['transmuted_grade'] !== null && (float) $grade['transmuted_grade'] < 75): ?>
+            <?= $reason !== null ? h($reason) : '<span class="text-amber-500 italic">Not yet given</span>' ?>
+          <?php else: ?>
+            <span class="text-slate-300">—</span>
+          <?php endif; ?>
+        </td>
       </tr>
       <?php endforeach; ?>
       <?php if (!$students): ?>

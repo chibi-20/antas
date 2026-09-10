@@ -178,12 +178,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare("UPDATE submission_status SET status = 'in_progress' WHERE section_subject_teacher_id = ? AND term = ?")->execute([$sstId, $term]);
         }
 
+        // Reasons for a below-75 grade are saved whenever posted, on any Save click — the
+        // picker is shown inline for any currently-failing student regardless of which button
+        // was clicked, same as scores themselves, not gated behind Submit.
+        $failReasons = $_POST['fail_reason'] ?? [];
+        $failReasonOther = $_POST['fail_reason_other'] ?? [];
+        if ($failReasons) {
+            $studentIds = array_column($students, 'id');
+            $recordedBy = (int) current_user()['id'];
+            $reasonUpsert = $pdo->prepare('INSERT INTO term_grade_fail_reasons (student_id, subject_id, term, school_year_id, reason, reason_other, recorded_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE reason = VALUES(reason), reason_other = VALUES(reason_other), recorded_by = VALUES(recorded_by)');
+            foreach ($failReasons as $studentId => $reason) {
+                $studentId = (int) $studentId;
+                if (!in_array($studentId, $studentIds, true) || !array_key_exists($reason, FAIL_REASON_LABELS)) {
+                    continue;
+                }
+                $otherText = $reason === 'other' ? trim((string) ($failReasonOther[$studentId] ?? '')) : null;
+                if ($reason === 'other' && $otherText === '') {
+                    continue; // "Other" needs the actual explanation before it's worth saving
+                }
+                $reasonUpsert->execute([$studentId, $assignment['subject_id'], $term, $assignment['school_year_id'], $reason, $otherText, $recordedBy]);
+            }
+        }
+
         // "Submit for Review" is a second submit button in this same form (not a separate
         // form/page) specifically so a click always saves whatever's on screen first — the
         // two used to be independent, and a teacher who clicked Submit without clicking Save
         // Scores first would lock the term with none of their scores ever persisted.
         $submitForReview = ($_POST['post_action'] ?? '') === 'submit_for_review';
         $incomplete = $submitForReview && !$rejected ? find_incomplete_graded_items($pdo, $sstId, $term, $students) : [];
+        $missingReasons = $submitForReview && !$rejected && !$incomplete
+            ? find_missing_fail_reasons($pdo, (int) $assignment['subject_id'], $term, (int) $assignment['school_year_id'], $students)
+            : [];
         if ($submitForReview && !$rejected && $incomplete) {
             // Grouped by student (one line each, every missing item listed together) rather
             // than one line per student/item pair — repeating the same name for each gap it's
@@ -198,6 +225,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             flash_set('error', "Can't submit yet — the following have no score for an item the rest of the class already has one for (enter 0 if they didn't complete it):\n"
                 . implode("\n", $lines));
+        } elseif ($submitForReview && !$rejected && $missingReasons) {
+            $lines = array_map(fn($m) => "• {$m['student_name']}", $missingReasons);
+            flash_set('error', "Can't submit yet — pick a reason for the below-75 grade for:\n" . implode("\n", $lines));
         } elseif ($submitForReview && !$rejected) {
             $currentStatus = $pdo->prepare('SELECT status FROM submission_status WHERE section_subject_teacher_id = ? AND term = ?');
             $currentStatus->execute([$sstId, $term]);
@@ -288,6 +318,19 @@ if ($items) {
 $gradeStmt = $pdo->prepare('SELECT * FROM term_grades WHERE student_id = ? AND subject_id = ? AND term = ?');
 $componentLabels = ['WW' => 'Written Work', 'PT' => 'Performance Task', 'EX' => 'Examinations'];
 
+// Any reason already saved for this subject/term, so the picker below re-shows what was
+// chosen last time instead of resetting to blank on every page load.
+$existingReasonsStmt = $pdo->prepare('SELECT student_id, reason, reason_other FROM term_grade_fail_reasons WHERE subject_id = ? AND term = ? AND school_year_id = ?');
+$existingReasonsStmt->execute([$assignment['subject_id'], $term, $assignment['school_year_id']]);
+$existingReasons = [];
+foreach ($existingReasonsStmt->fetchAll() as $r) {
+    $existingReasons[(int) $r['student_id']] = ['reason' => $r['reason'], 'reason_other' => $r['reason_other']];
+}
+// Collected while looping the roster below (grade_display_class() already flags the same
+// below-75 threshold) — a currently-failing student gets an inline reason picker; one who
+// recovers on a later save simply stops appearing here and is never required to have one.
+$failingStudents = [];
+
 // Prior terms' transmuted grade for THIS subject, so a teacher sees the running record
 // (not just the currently selected term) once they're on Term 2 or 3.
 $priorGrades = [];
@@ -349,50 +392,50 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
 ?>
 <div class="flex items-center justify-between mb-6">
   <div class="flex items-center gap-3">
-    <span class="text-sm text-slate-500">Term <?= $term ?></span>
+    <span class="text-sm text-slate-500 dark:text-slate-400">Term <?= $term ?></span>
     <?= status_badge($submission['status'] ?? 'not_started') ?>
   </div>
   <form method="get" class="flex gap-1">
     <input type="hidden" name="sst_id" value="<?= $sstId ?>">
     <?php for ($t = 1; $t <= 3; $t++): ?>
-      <button type="submit" name="term" value="<?= $t ?>" class="px-3 py-1.5 rounded-lg text-sm <?= $t === $term ? 'bg-accent-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50' ?>">Term <?= $t ?></button>
+      <button type="submit" name="term" value="<?= $t ?>" class="px-3 py-1.5 rounded-lg text-sm <?= $t === $term ? 'bg-accent-600 text-white' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700' ?>">Term <?= $t ?></button>
     <?php endfor; ?>
   </form>
 </div>
 
 <?php if ($submission && $submission['status'] === 'returned_for_revision' && $submission['revision_comment']): ?>
-<div class="mb-6 px-4 py-3 rounded-lg text-sm bg-rose-50 text-rose-700 border border-rose-200">
+<div class="mb-6 px-4 py-3 rounded-lg text-sm bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
   <strong>Returned for revision:</strong> <?= h($submission['revision_comment']) ?>
 </div>
 <?php endif; ?>
 
 <?php if (!$editable): ?>
-<div class="mb-6 px-4 py-3 rounded-lg text-sm bg-slate-100 text-slate-600 border border-slate-200">
+<div class="mb-6 px-4 py-3 rounded-lg text-sm bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
   This term is <?= h(STATUS_LABELS[$submission['status']] ?? $submission['status']) ?> and can no longer be edited.
 </div>
 <?php endif; ?>
 
 <?php if ($submission && $submission['status'] === 'published'): ?>
   <?php if ($editRequest && $editRequest['status'] === 'pending'): ?>
-  <div class="mb-6 px-4 py-3 rounded-lg text-sm bg-amber-50 text-amber-700 border border-amber-200">
+  <div class="mb-6 px-4 py-3 rounded-lg text-sm bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
     <strong>Edit request pending Head Teacher approval.</strong>
-    <div class="mt-1 text-amber-600">Reason: <?= h($editRequest['reason']) ?></div>
+    <div class="mt-1 text-amber-600 dark:text-amber-400">Reason: <?= h($editRequest['reason']) ?></div>
   </div>
   <?php else: ?>
     <?php if ($editRequest && $editRequest['status'] === 'rejected'): ?>
-    <div class="mb-4 px-4 py-3 rounded-lg text-sm bg-rose-50 text-rose-700 border border-rose-200">
+    <div class="mb-4 px-4 py-3 rounded-lg text-sm bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
       <strong>Edit request rejected<?= $editRequest['reviewed_by_name'] ? ' by ' . h($editRequest['reviewed_by_name']) : '' ?>.</strong>
       <?php if ($editRequest['review_comment']): ?><div class="mt-1">Reason: <?= h($editRequest['review_comment']) ?></div><?php endif; ?>
     </div>
     <?php endif; ?>
-    <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6 mb-6 max-w-lg">
-      <h2 class="text-sm font-semibold text-slate-600 mb-1">Spot an error?</h2>
-      <p class="text-xs text-slate-400 mb-3">Published grades are locked. Request an edit and explain why — the Head Teacher who supervises this subject must approve before you can make changes.</p>
+    <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-6 mb-6 max-w-lg">
+      <h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-1">Spot an error?</h2>
+      <p class="text-xs text-slate-400 dark:text-slate-500 mb-3">Published grades are locked. Request an edit and explain why — the Head Teacher who supervises this subject must approve before you can make changes.</p>
       <form method="post" action="<?= h(url('/teacher/request_edit.php')) ?>">
         <?= csrf_field() ?>
         <input type="hidden" name="sst_id" value="<?= $sstId ?>">
         <input type="hidden" name="term" value="<?= $term ?>">
-        <textarea name="reason" required placeholder="Explain what needs to be corrected and why…" class="w-full mb-3 px-3 py-2 border border-slate-300 rounded-lg text-sm" rows="2"></textarea>
+        <textarea name="reason" required placeholder="Explain what needs to be corrected and why…" class="w-full mb-3 px-3 py-2 border border-slate-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 rounded-lg text-sm" rows="2"></textarea>
         <button type="submit" class="bg-accent-600 hover:bg-accent-700 text-white font-medium px-4 py-2 rounded-lg text-sm">Request Edit</button>
       </form>
     </div>
@@ -400,31 +443,32 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
 <?php endif; ?>
 
 <?php if ($editable): ?>
-<div class="mb-4 px-4 py-3 rounded-lg text-sm bg-sky-50 text-sky-700 border border-sky-200">
-  Tip: click a score cell, then paste a block of cells copied straight from Excel — it'll fill across students and items starting from that cell. Column names and highest scores are editable too (click directly on them).
+<div id="paste-tip-banner" class="mb-4 px-4 py-3 rounded-lg text-sm bg-sky-50 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800 flex items-start gap-3 hidden">
+  <div class="flex-1">Tip: click a score cell, then paste a block of cells copied straight from Excel — it'll fill across students and items starting from that cell. Column names and highest scores are editable too (click directly on them).</div>
+  <button type="button" id="paste-tip-dismiss" aria-label="Dismiss" class="flex-shrink-0 text-sky-400 dark:text-sky-500 hover:text-sky-600 dark:hover:text-sky-300 leading-none text-lg">&times;</button>
 </div>
-<div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6 mb-6">
-  <h2 class="text-sm font-semibold text-slate-600 mb-4">Add Assessment Item</h2>
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-6 mb-6">
+  <h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-4">Add Assessment Item</h2>
   <form method="post" class="flex flex-wrap items-end gap-3">
     <?= csrf_field() ?>
     <input type="hidden" name="action" value="add_item">
     <input type="hidden" name="sst_id" value="<?= $sstId ?>">
     <input type="hidden" name="term" value="<?= $term ?>">
     <div>
-      <label class="block text-xs font-medium text-slate-500 mb-1">Component</label>
-      <select name="component_type" required class="px-3 py-2 border border-slate-300 rounded-lg">
+      <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Component</label>
+      <select name="component_type" required class="px-3 py-2 border border-slate-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 rounded-lg">
         <option value="WW">Written Work</option>
         <option value="PT">Performance Task</option>
       </select>
-      <p class="text-[10px] text-slate-400 mt-1">Examinations is fixed to Summative Test 1, Summative Test 2 &amp; Term Exam.</p>
+      <p class="text-[10px] text-slate-400 dark:text-slate-500 mt-1">Examinations is fixed to Summative Test 1, Summative Test 2 &amp; Term Exam.</p>
     </div>
     <div>
-      <label class="block text-xs font-medium text-slate-500 mb-1">Item name</label>
-      <input type="text" name="item_name" required placeholder="Quiz 1" class="px-3 py-2 border border-slate-300 rounded-lg">
+      <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Item name</label>
+      <input type="text" name="item_name" required placeholder="Quiz 1" class="px-3 py-2 border border-slate-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 rounded-lg">
     </div>
     <div>
-      <label class="block text-xs font-medium text-slate-500 mb-1">Highest score</label>
-      <input type="number" step="0.01" min="0.01" name="highest_possible_score" required class="w-28 px-3 py-2 border border-slate-300 rounded-lg">
+      <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Highest score</label>
+      <input type="number" step="0.01" min="0.01" name="highest_possible_score" required class="w-28 px-3 py-2 border border-slate-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 rounded-lg">
     </div>
     <button type="submit" class="bg-accent-600 hover:bg-accent-700 text-white font-medium px-4 py-2 rounded-lg text-sm">Add Item</button>
   </form>
@@ -448,87 +492,169 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
   <input type="hidden" name="action" value="save_scores">
   <input type="hidden" name="sst_id" value="<?= $sstId ?>">
   <input type="hidden" name="term" value="<?= $term ?>">
-  <div id="grid-scroll-top" class="overflow-x-auto mb-1"><div id="grid-scroll-spacer" style="height:1px;"></div></div>
-  <div id="grid-scroll-bottom" class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-x-auto mb-4">
+  <?php // A bounded-height pane that scrolls internally on both axes (rather than the whole
+  // page scrolling past it) — this is what makes the sticky thead below actually stick:
+  // position:sticky only sticks relative to its nearest ancestor that truly scrolls, and an
+  // overflow-x-auto div whose height just grows with its content never scrolls itself (the
+  // page does), so anything sticky inside it would just scroll away with the page instead of
+  // staying put. Capping the height here makes this div the real scrolling viewport for the
+  // grid, so the header row and the student's frozen name column stay pinned exactly like an
+  // Excel split view while the roster scrolls underneath them.
+  //
+  // The rounded corners live on this OUTER wrapper, not on the scrolling div itself — a
+  // rounded-corner element that is also the scroll container tends to let a frame of the
+  // content scrolling past underneath smear through the corner during compositing (a
+  // Chromium seam bug when position:sticky, overflow:auto and border-radius all land on the
+  // same element). Splitting "clip to rounded corners" (outer, overflow-hidden, no scrolling
+  // of its own) from "scroll" (inner, plain rectangle) avoids that seam entirely. ?>
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden mb-4">
+  <div id="grid-scroll-bottom" class="overflow-auto max-h-[70vh]">
     <table class="text-sm min-w-full">
-      <thead class="bg-slate-50 text-slate-500 text-xs uppercase">
+      <?php
+        // Distinct color band per component group (#7) — deliberately different from the
+        // rose/emerald/amber/sky/accent colors already used elsewhere for pass-fail/status
+        // meanings, so a column-group color is never mistaken for a status signal.
+        // Fully opaque in both modes — these bands are now sticky headers sitting over
+        // scrolling content, so a translucent background (the original dark:bg-violet-900/40
+        // etc.) would let the scrolled-past row underneath show through as a "ghost" row.
+        $componentBandClasses = [
+            'WW' => 'bg-violet-100 dark:bg-violet-900 text-violet-700 dark:text-violet-300',
+            'PT' => 'bg-teal-100 dark:bg-teal-900 text-teal-700 dark:text-teal-300',
+            'EX' => 'bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300',
+        ];
+        // Row1 sticks to the very top of the scrolling pane (#grid-scroll-bottom, top-0);
+        // row2 stacks right below it (top-0 + row1's own h-8 = top-8) — #6's sticky header,
+        // combined with #7's grouped bands.
+        $headSticky = 'sticky z-20 bg-slate-50 dark:bg-slate-800';
+      ?>
+      <thead class="text-slate-500 dark:text-slate-400 text-xs uppercase">
         <tr>
-          <th class="text-left px-4 py-3 sticky left-0 bg-slate-50">Student</th>
+          <th rowspan="2" class="text-left px-4 py-3 sticky left-0 top-0 z-30 bg-slate-50 dark:bg-slate-800">Student</th>
+          <?php foreach (['WW', 'PT', 'EX'] as $type): ?>
+            <?php if (!$itemsByType[$type]) continue; ?>
+            <th colspan="<?= count($itemsByType[$type]) ?>" class="h-8 text-center font-semibold normal-case <?= $headSticky ?> top-0 <?= $componentBandClasses[$type] ?>"><?= $componentLabels[$type] ?></th>
+          <?php endforeach; ?>
+          <?php for ($t = 1; $t < $term; $t++): ?>
+            <th rowspan="2" class="text-center px-3 py-3 whitespace-nowrap <?= $headSticky ?> top-0">Term <?= $t ?></th>
+          <?php endfor; ?>
+          <th rowspan="2" class="text-center px-3 py-3 <?= $headSticky ?> top-0">Initial Grade</th>
+          <th rowspan="2" class="text-center px-3 py-3 <?= $headSticky ?> top-0">Transmuted Grade</th>
+          <?php if ($term === 3): ?>
+            <th rowspan="2" class="text-center px-3 py-3 whitespace-nowrap text-accent-600 dark:text-accent-400 <?= $headSticky ?> top-0">Final Grade</th>
+          <?php endif; ?>
+        </tr>
+        <tr>
           <?php foreach (['WW', 'PT', 'EX'] as $type): ?>
             <?php foreach ($itemsByType[$type] as $item): ?>
-              <th class="text-center px-2 py-3 whitespace-nowrap">
+              <th class="text-center px-2 py-3 whitespace-nowrap <?= $headSticky ?> top-8">
                 <input type="text" name="item_name[<?= (int) $item['id'] ?>]" value="<?= h($item['item_name']) ?>"
                   <?= $editable ? '' : 'disabled' ?>
-                  class="w-24 text-center text-xs font-semibold text-slate-600 normal-case border-b border-dashed border-slate-300 focus:border-accent-500 outline-none bg-transparent disabled:border-transparent">
-                <div class="flex items-center justify-center gap-1 mt-0.5">
-                  <span class="text-[10px] font-normal text-slate-400">/</span>
+                  class="w-24 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 normal-case border border-slate-200 dark:border-slate-600 rounded px-1 py-0.5 hover:border-accent-400 dark:hover:border-accent-500 focus:border-accent-500 outline-none bg-white dark:bg-slate-900 disabled:bg-transparent disabled:border-transparent">
+                <div class="flex items-center justify-center gap-1 mt-1">
+                  <span class="text-[10px] font-normal text-slate-400 dark:text-slate-500">/</span>
                   <input type="number" step="0.01" min="0.01" name="item_highest[<?= (int) $item['id'] ?>]" value="<?= h(rtrim(rtrim((string) $item['highest_possible_score'], '0'), '.')) ?>"
                     <?= $editable ? '' : 'disabled' ?>
-                    class="w-10 text-center text-[10px] font-normal text-slate-400 border-b border-dashed border-slate-300 focus:border-accent-500 outline-none bg-transparent disabled:border-transparent">
-                  <span class="text-[10px] font-normal text-slate-800"><?= $componentLabels[$type] ?></span>
+                    class="w-10 text-center text-[10px] font-normal text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-600 rounded hover:border-accent-400 dark:hover:border-accent-500 focus:border-accent-500 outline-none bg-white dark:bg-slate-900 disabled:bg-transparent disabled:border-transparent">
+                  <?php if ($editable && $type !== 'EX'): ?>
+                  <button type="submit" form="delete-item-<?= (int) $item['id'] ?>" title="Remove this item" class="p-1 rounded hover:bg-rose-50 dark:hover:bg-rose-900/30 text-rose-400 dark:text-rose-500 hover:text-rose-600 dark:hover:text-rose-400">
+                    <?= icon_svg('trash', 'w-3 h-3') ?>
+                  </button>
+                  <?php endif; ?>
                 </div>
-                <?php if ($editable && $type !== 'EX'): ?>
-                <button type="submit" form="delete-item-<?= (int) $item['id'] ?>" class="text-rose-400 hover:text-rose-600 text-[10px]">remove</button>
-                <?php endif; ?>
               </th>
             <?php endforeach; ?>
           <?php endforeach; ?>
-          <?php for ($t = 1; $t < $term; $t++): ?>
-            <th class="text-center px-3 py-3 whitespace-nowrap">Term <?= $t ?></th>
-          <?php endfor; ?>
-          <th class="text-center px-3 py-3">Initial Grade</th>
-          <th class="text-center px-3 py-3">Transmuted Grade</th>
-          <?php if ($term === 3): ?>
-            <th class="text-center px-3 py-3 whitespace-nowrap text-accent-600">Final Grade</th>
-          <?php endif; ?>
         </tr>
       </thead>
-      <tbody class="divide-y divide-slate-100">
+      <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
         <?php $lastSex = null; foreach ($students as $rowIndex => $student): ?>
         <?php if ($student['sex'] !== $lastSex): $lastSex = $student['sex']; ?>
         <tr>
-          <td colspan="99" class="px-4 py-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide bg-slate-50 sticky left-0"><?= $student['sex'] === 'M' ? 'Male' : 'Female' ?></td>
+          <td colspan="99" class="px-4 py-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide bg-slate-50 dark:bg-slate-800 sticky left-0 z-10"><?= $student['sex'] === 'M' ? 'Male' : 'Female' ?></td>
         </tr>
         <?php endif; ?>
         <?php
             $gradeStmt->execute([$student['id'], $assignment['subject_id'], $term]);
             $grade = $gradeStmt->fetch();
+            if ($grade && $grade['transmuted_grade'] !== null && (float) $grade['transmuted_grade'] < 75) {
+                $failingStudents[] = ['id' => (int) $student['id'], 'full_name' => $student['full_name'], 'grade' => $grade['transmuted_grade']];
+            }
         ?>
         <tr>
-          <td class="px-4 py-2 font-medium whitespace-nowrap sticky left-0 bg-white"><?= h($student['full_name']) ?></td>
+          <td class="px-4 py-2 font-medium whitespace-nowrap sticky left-0 z-10 bg-white dark:bg-slate-800 dark:text-slate-100"><?= h($student['full_name']) ?></td>
           <?php foreach (['WW', 'PT', 'EX'] as $type): ?>
             <?php foreach ($itemsByType[$type] as $item): ?>
               <td class="px-3 py-2 text-center">
-                <?php $rawScore = $scoreLookup[$item['id']][$student['id']] ?? null; ?>
+                <?php
+                  $rawScore = $scoreLookup[$item['id']][$student['id']] ?? null;
+                  // Empty vs filled gets a visibly different look (#3) — dashed border + faint
+                  // tint for "nothing here yet" vs a solid border for "has a value" — so a
+                  // gap is visible at a glance while scanning, without looking like an error
+                  // (a blank cell is completely normal mid-term).
+                  $cellStateClass = $rawScore !== null
+                      ? 'border-solid border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900'
+                      : 'border-dashed border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/40';
+                ?>
                 <input type="number" step="1" min="0" max="<?= h($item['highest_possible_score']) ?>"
                   name="scores[<?= (int) $item['id'] ?>][<?= (int) $student['id'] ?>]"
                   value="<?= $rawScore !== null ? (int) round((float) $rawScore) : '' ?>"
                   data-row="<?= $rowIndex ?>" data-col="<?= $itemColumns[$item['id']] ?>" data-item-id="<?= (int) $item['id'] ?>"
                   <?= $editable ? '' : 'disabled' ?>
-                  class="js-grade-cell w-16 px-2 py-1 border border-slate-300 rounded text-center disabled:bg-slate-50 disabled:text-slate-400 focus:border-accent-500 focus:ring-1 focus:ring-accent-500">
+                  class="js-grade-cell w-16 px-2 py-1 border <?= $cellStateClass ?> dark:text-slate-100 rounded text-center disabled:bg-slate-50 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-500 focus:border-accent-500 focus:ring-1 focus:ring-accent-500">
               </td>
             <?php endforeach; ?>
           <?php endforeach; ?>
           <?php for ($t = 1; $t < $term; $t++): $pg = $priorGrades[$t][$student['id']] ?? null; ?>
-            <td class="px-3 py-2 text-center <?= $pg !== null ? grade_display_class((float) $pg) : 'text-slate-500' ?>"><?= $pg !== null ? h($pg) : '—' ?></td>
+            <td class="px-3 py-2 text-center <?= $pg !== null ? grade_display_class((float) $pg) : 'text-slate-500 dark:text-slate-400' ?>"><?= $pg !== null ? h($pg) : '—' ?></td>
           <?php endfor; ?>
-          <td class="px-3 py-2 text-center font-medium" data-preview-initial="<?= (int) $student['id'] ?>"><?= $grade && $grade['initial_grade'] !== null ? h($grade['initial_grade']) : '—' ?></td>
-          <td class="px-3 py-2 text-center font-semibold <?= $grade && $grade['transmuted_grade'] !== null ? (grade_display_class((float) $grade['transmuted_grade']) ?: 'text-accent-700') : 'text-accent-700' ?>" data-preview-transmuted="<?= (int) $student['id'] ?>"><?= $grade && $grade['transmuted_grade'] !== null ? h($grade['transmuted_grade']) : '—' ?></td>
+          <td class="px-3 py-2 text-center font-medium dark:text-slate-200" data-preview-initial="<?= (int) $student['id'] ?>"><?= $grade && $grade['initial_grade'] !== null ? h($grade['initial_grade']) : '—' ?></td>
+          <td class="px-3 py-2 text-center font-semibold <?= $grade && $grade['transmuted_grade'] !== null ? (grade_display_class((float) $grade['transmuted_grade']) ?: 'text-accent-700 dark:text-accent-400') : 'text-accent-700 dark:text-accent-400' ?>" data-preview-transmuted="<?= (int) $student['id'] ?>"><?= $grade && $grade['transmuted_grade'] !== null ? h($grade['transmuted_grade']) : '—' ?></td>
           <?php if ($term === 3): $fg = $finalGrades[$student['id']] ?? null; ?>
-            <td class="px-3 py-2 text-center font-semibold <?= $fg !== null ? (grade_display_class((float) $fg) ?: 'text-accent-700') : 'text-accent-700' ?>"><?= $fg !== null ? h($fg) : '—' ?></td>
+            <td class="px-3 py-2 text-center font-semibold <?= $fg !== null ? (grade_display_class((float) $fg) ?: 'text-accent-700 dark:text-accent-400') : 'text-accent-700 dark:text-accent-400' ?>"><?= $fg !== null ? h($fg) : '—' ?></td>
           <?php endif; ?>
         </tr>
         <?php endforeach; ?>
         <?php if (!$students): ?>
-        <tr><td colspan="99" class="px-4 py-6 text-center text-slate-400">No students in this section yet.</td></tr>
+        <tr><td colspan="99" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500">No students in this section yet.</td></tr>
         <?php endif; ?>
       </tbody>
     </table>
   </div>
+  </div>
+  <?php if ($editable && $failingStudents): ?>
+  <div class="bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-800 rounded-xl shadow-sm p-5 mb-4">
+    <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1">Reasons for failing grades</h3>
+    <p class="text-xs text-slate-400 dark:text-slate-500 mb-3">Required before this term can be submitted for review — pick whichever best explains it.</p>
+    <div class="space-y-3">
+      <?php foreach ($failingStudents as $fs): $existing = $existingReasons[$fs['id']] ?? null; ?>
+      <div class="flex flex-wrap items-start gap-3 pb-3 border-b border-slate-100 dark:border-slate-700 last:border-0 last:pb-0">
+        <div class="w-48 flex-shrink-0">
+          <div class="text-sm font-medium text-slate-700 dark:text-slate-200"><?= h($fs['full_name']) ?></div>
+          <div class="text-xs text-rose-600 dark:text-rose-400 font-semibold"><?= h($fs['grade']) ?></div>
+        </div>
+        <div class="flex-1 min-w-[220px]">
+          <select name="fail_reason[<?= $fs['id'] ?>]" class="js-fail-reason-select w-full px-3 py-2 border border-slate-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 rounded-lg text-sm" data-student-id="<?= $fs['id'] ?>">
+            <option value="">— Select a reason —</option>
+            <?php foreach (FAIL_REASON_LABELS as $key => $label): ?>
+            <option value="<?= h($key) ?>" <?= ($existing['reason'] ?? '') === $key ? 'selected' : '' ?>><?= h($label) ?></option>
+            <?php endforeach; ?>
+          </select>
+          <textarea name="fail_reason_other[<?= $fs['id'] ?>]" data-other-for="<?= $fs['id'] ?>" placeholder="Specify…" rows="2"
+            class="js-fail-reason-other mt-2 w-full px-3 py-2 border border-slate-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 rounded-lg text-sm <?= ($existing['reason'] ?? '') === 'other' ? '' : 'hidden' ?>"><?= h($existing['reason_other'] ?? '') ?></textarea>
+        </div>
+      </div>
+      <?php endforeach; ?>
+    </div>
+  </div>
+  <?php endif; ?>
   <?php if ($editable && $items && $students): ?>
   <div class="flex gap-3">
-    <button type="submit" class="bg-accent-600 hover:bg-accent-700 text-white font-medium px-5 py-2.5 rounded-lg text-sm">Save Scores</button>
-    <button type="submit" name="post_action" value="submit_for_review" data-confirm="Submit this term for Head Teacher review? You won't be able to edit scores until it's returned or published." class="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-5 py-2.5 rounded-lg text-sm">Save &amp; Submit for Review</button>
+    <?php /* #5: Save Scores (frequent, reversible) is now the visually lighter/secondary
+       action; Submit (locks the term) stays solid and gets an icon to reinforce that it's the
+       one that actually finalizes something — the two used to look like equally-weighted
+       options despite very different consequences. */ ?>
+    <button type="submit" class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 font-medium px-5 py-2.5 rounded-lg text-sm">Save Scores</button>
+    <button type="submit" name="post_action" value="submit_for_review" data-confirm="Submit this term for Head Teacher review? You won't be able to edit scores until it's returned or published." class="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-5 py-2.5 rounded-lg text-sm"><?= icon_svg('send', 'w-3.5 h-3.5') ?> Save &amp; Submit for Review</button>
   </div>
   <?php endif; ?>
 </form>
@@ -550,12 +676,9 @@ window.addEventListener('DOMContentLoaded', function () {
   });
   initPasteGrid();
   initGridArrowNav();
+  initFailReasonToggle();
+  initDismissibleTip();
 });
 </script>
 <?php endif; ?>
-<script>
-window.addEventListener('DOMContentLoaded', function () {
-  initTopScrollbar('grid-scroll-top', 'grid-scroll-bottom', 'grid-scroll-spacer');
-});
-</script>
 <?php render_footer(); ?>

@@ -1,5 +1,31 @@
 /* Small overrides beyond Tailwind CDN defaults. Print-specific rules live here too. */
 
+/* Tells the browser dark mode is genuinely supported once html.dark is set, so native form
+   chrome (scrollbars, number input spinners, checkboxes, date pickers) switches to its dark
+   appearance too — without this, only our own Tailwind classes go dark and native controls
+   stay stuck light regardless of the page's own background. */
+html.dark {
+  color-scheme: dark;
+}
+
+/* class_record.php: brief highlight on a score cell right after an Excel-paste block lands in
+   it (assets/js/app.js's initPasteGrid) — confirms which cells just changed before the page
+   ever reloads. Ends on its own via the 'animationend' listener that removes this class. */
+@keyframes just-pasted-flash {
+  0% { background-color: rgb(224 231 255); } /* accent-100-ish */
+  100% { background-color: transparent; }
+}
+.js-just-pasted {
+  animation: just-pasted-flash 900ms ease-out;
+}
+html.dark .js-just-pasted {
+  animation-name: just-pasted-flash-dark;
+}
+@keyframes just-pasted-flash-dark {
+  0% { background-color: rgb(67 56 202 / 0.5); } /* accent-700-ish, translucent */
+  100% { background-color: transparent; }
+}
+
 /* Soft decorative blob in the top-right of each page's content header — purely visual. */
 .deco-blob {
   position: absolute;

@@ -11,7 +11,28 @@ if ($term < 1 || $term > 3) {
 }
 
 $section = require_own_section($sectionId);
+$pdo = db();
 $data = get_consolidated_data($sectionId, (int) $section['school_year_id'], $term);
+
+// Reasons a teacher recorded for a below-75 grade (see teacher/class_record.php) — keyed by
+// [student_id][subject_id] since that's the actual tuple a reason is saved against; for a
+// compound subject (e.g. MAPEH) the reason lives under whichever COMPONENT the teacher was
+// grading (Music-Arts/PE-Health), never the merged parent's own id, so the lookup below
+// resolves through the parent's 'children' list for those rows.
+$studentIds = array_column($data['students'], 'id');
+$reasonsByStudentSubject = [];
+if ($studentIds) {
+    $placeholders = implode(',', array_fill(0, count($studentIds), '?'));
+    $reasonStmt = $pdo->prepare("SELECT student_id, subject_id, reason, reason_other FROM term_grade_fail_reasons WHERE term = ? AND school_year_id = ? AND student_id IN ($placeholders)");
+    $reasonStmt->execute(array_merge([$term, (int) $section['school_year_id']], $studentIds));
+    foreach ($reasonStmt->fetchAll() as $r) {
+        $label = FAIL_REASON_LABELS[$r['reason']] ?? $r['reason'];
+        if ($r['reason'] === 'other' && $r['reason_other']) {
+            $label = $r['reason_other'];
+        }
+        $reasonsByStudentSubject[(int) $r['student_id']][(int) $r['subject_id']] = $label;
+    }
+}
 
 // Every published subject grade below 75 (the DepEd passing mark) for the selected term,
 // grouped per student. 70-74 is split out as "For Remedial" vs a harder "Failing" below 70 —
@@ -28,6 +49,13 @@ foreach ($data['students'] as $student) {
         if ($g === null || (float) $g >= 75) {
             continue;
         }
+        $reasonSubjectIds = isset($subject['children']) ? array_column($subject['children'], 'subject_id') : [$subject['subject_id']];
+        $reasonTexts = [];
+        foreach ($reasonSubjectIds as $rid) {
+            if (isset($reasonsByStudentSubject[$student['id']][$rid])) {
+                $reasonTexts[] = $reasonsByStudentSubject[$student['id']][$rid];
+            }
+        }
         if (!isset($atRisk[$student['id']])) {
             $atRisk[$student['id']] = ['student' => $student, 'subjects' => []];
         }
@@ -35,6 +63,7 @@ foreach ($data['students'] as $student) {
             'name' => $subject['subject_name'],
             'grade' => $g,
             'band' => (float) $g < 70 ? 'Failing' : 'For Remedial',
+            'reason' => $reasonTexts ? implode('; ', array_unique($reasonTexts)) : null,
         ];
     }
 }
@@ -61,7 +90,7 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
 <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
   <table class="w-full text-sm">
     <thead class="bg-slate-50 text-slate-500 text-xs uppercase">
-      <tr><th class="text-left px-4 py-3">Student</th><th class="text-left px-4 py-3">Subject</th><th class="text-left px-4 py-3">Grade</th><th class="text-left px-4 py-3">Status</th></tr>
+      <tr><th class="text-left px-4 py-3">Student</th><th class="text-left px-4 py-3">Subject</th><th class="text-left px-4 py-3">Grade</th><th class="text-left px-4 py-3">Status</th><th class="text-left px-4 py-3">Reason</th></tr>
     </thead>
     <tbody class="divide-y divide-slate-100">
       <?php foreach ($atRisk as $row): ?>
@@ -73,6 +102,7 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
           <td class="px-4 py-3">
             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium <?= $s['band'] === 'Failing' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700' ?>"><?= h($s['band']) ?></span>
           </td>
+          <td class="px-4 py-3 text-slate-500 text-xs"><?= $s['reason'] !== null ? h($s['reason']) : '<span class="text-slate-300 italic">Not yet given</span>' ?></td>
         </tr>
         <?php endforeach; ?>
       <?php endforeach; ?>

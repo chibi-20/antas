@@ -111,6 +111,7 @@ render_header('Users');
   </form>
 </div>
 
+<input type="text" id="user-search" placeholder="Search by name or username…" class="w-full max-w-sm mb-3 px-3 py-2 border border-slate-300 rounded-lg text-sm">
 <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
   <table class="w-full text-sm">
     <thead class="bg-slate-50 text-slate-500 text-xs uppercase">
@@ -118,7 +119,7 @@ render_header('Users');
     </thead>
     <tbody class="divide-y divide-slate-100">
       <?php foreach ($users as $u): ?>
-      <tr>
+      <tr class="js-user-search-row" data-search="<?= h($u['full_name'] . ' ' . $u['username']) ?>">
         <td class="px-4 py-3 font-medium"><?= h($u['full_name']) ?></td>
         <td class="px-4 py-3 text-slate-600"><?= h($u['username']) ?></td>
         <td class="px-4 py-3 text-slate-600"><?= h(ucwords(str_replace('_', ' ', $u['role']))) ?></td>
@@ -141,4 +142,9 @@ render_header('Users');
     </tbody>
   </table>
 </div>
+<script>
+window.addEventListener('DOMContentLoaded', function () {
+  initUserSearch();
+});
+</script>
 <?php render_footer(); ?>

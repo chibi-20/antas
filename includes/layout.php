@@ -12,11 +12,25 @@ const STATUS_LABELS = [
 ];
 
 const STATUS_CLASSES = [
-    'not_started' => 'bg-slate-100 text-slate-600',
-    'in_progress' => 'bg-amber-100 text-amber-700',
-    'submitted_for_review' => 'bg-blue-100 text-blue-700',
-    'returned_for_revision' => 'bg-rose-100 text-rose-700',
-    'published' => 'bg-emerald-100 text-emerald-700',
+    'not_started' => 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300',
+    'in_progress' => 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300',
+    'submitted_for_review' => 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+    'returned_for_revision' => 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300',
+    'published' => 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
+];
+
+// Fixed reasons a teacher can give for a below-75 term grade (term_grade_fail_reasons.reason).
+const FAIL_REASON_LABELS = [
+    'low_scores' => 'Low scores across most components (WW/PT/QA)',
+    'missing_pt' => 'Missing or incomplete performance tasks/projects',
+    'missing_qa' => 'Missing or failed quarterly assessment',
+    'absences' => 'Excessive absences (below attendance requirement)',
+    'noncompliance_modular' => 'Non-compliance with modular/take-home requirements',
+    'no_remediation' => 'Did not undergo or complete remediation/intervention',
+    'behavioral' => 'Behavioral/conduct issue affecting compliance',
+    'health_absences' => 'Health-related absences affecting completion',
+    'personal_family' => 'Personal/family circumstances affecting submission',
+    'other' => 'Other (specify)',
 ];
 
 function status_badge(?string $status): string
@@ -56,6 +70,10 @@ function icon_paths(string $name): string
         'eye-off' => '<path d="M3 3l18 18"/><path d="M10.6 5.2A10.6 10.6 0 0 1 12 5c6.5 0 10 7 10 7a15.6 15.6 0 0 1-3.1 4.1M6.4 6.4A15.6 15.6 0 0 0 2 12s3.5 7 10 7c1.4 0 2.7-.3 3.9-.8"/><path d="M9.5 9.5a3 3 0 0 0 4.2 4.2"/>',
         'graduation-cap' => '<path d="M12 4L3 8l9 4 9-4-9-4z"/><path d="M6 10.5V15c0 1.5 2.7 3 6 3s6-1.5 6-3v-4.5"/><path d="M21 8v5"/>',
         'download' => '<path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/>',
+        'trash' => '<path d="M4 7h16"/><path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/><path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"/>',
+        'send' => '<path d="M4 4l17 8-17 8 4-8-4-8z"/>',
+        'moon' => '<path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z"/>',
+        'sun' => '<circle cx="12" cy="12" r="4.5"/><path d="M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/>',
         default => '',
     };
 }
@@ -196,9 +214,21 @@ function render_header(string $title, ?string $subtitle = null): void
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?= htmlspecialchars($title) ?> · TAPAT</title>
+<script>
+// Applied before Tailwind/CSS load so there's never a flash of the wrong theme on first
+// paint. Falls back to the OS preference on a first visit (no stored choice yet).
+(function () {
+  try {
+    var stored = localStorage.getItem('theme');
+    var dark = stored ? stored === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.classList.toggle('dark', dark);
+  } catch (e) {}
+})();
+</script>
 <script src="https://cdn.tailwindcss.com"></script>
 <script>
 tailwind.config = {
+  darkMode: 'class',
   theme: {
     extend: {
       colors: { accent: { 50:'#eef2ff',100:'#e0e7ff',500:'#6366f1',600:'#4f46e5',700:'#4338ca' } }
@@ -208,59 +238,65 @@ tailwind.config = {
 </script>
 <link rel="stylesheet" href="<?= htmlspecialchars(versioned_url('/assets/css/app.css')) ?>">
 </head>
-<body class="bg-slate-50 text-slate-800 min-h-screen no-print">
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-800 min-h-screen no-print">
 <?php if ($user): ?>
 <?php $notifCount = notification_count($user); ?>
 <div class="flex min-h-screen">
-  <aside class="w-64 bg-white border-r border-slate-200 flex-shrink-0 no-print flex flex-col sticky top-0 h-screen">
-    <div class="px-5 py-4 border-b border-slate-200">
-      <div class="font-semibold text-accent-700 text-lg">TAPAT</div>
-      <div class="text-xs text-slate-500">Grade Consolidation System</div>
+  <aside class="w-64 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 flex-shrink-0 no-print flex flex-col sticky top-0 h-screen">
+    <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-700">
+      <div class="font-semibold text-accent-700 dark:text-accent-300 text-lg">TAPAT</div>
+      <div class="text-xs text-slate-500 dark:text-slate-400">Grade Consolidation System</div>
     </div>
     <nav class="px-3 py-4 space-y-1 flex-1 overflow-y-auto">
       <?php foreach (nav_items($user) as $label => $path): ?>
-        <a href="<?= htmlspecialchars(url($path)) ?>" class="block px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-accent-50 hover:text-accent-700"><?= htmlspecialchars($label) ?></a>
+        <a href="<?= htmlspecialchars(url($path)) ?>" class="block px-3 py-2 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-accent-50 dark:hover:bg-accent-900/30 hover:text-accent-700 dark:hover:text-accent-300"><?= htmlspecialchars($label) ?></a>
       <?php endforeach; ?>
     </nav>
-    <div class="px-3 py-4 border-t border-slate-200">
-      <div class="px-3 text-sm text-slate-700 font-medium"><?= htmlspecialchars($user['full_name']) ?></div>
-      <div class="px-3 text-xs text-slate-400 mb-2"><?= htmlspecialchars(ucwords(str_replace('_', ' ', $user['role']))) ?></div>
-      <a href="<?= htmlspecialchars(url('/logout.php')) ?>" class="block px-3 py-2 rounded-lg text-sm text-rose-600 hover:bg-rose-50">Log out</a>
+    <div class="px-3 py-4 border-t border-slate-200 dark:border-slate-700">
+      <div class="px-3 text-sm text-slate-700 dark:text-slate-200 font-medium"><?= htmlspecialchars($user['full_name']) ?></div>
+      <div class="px-3 text-xs text-slate-400 dark:text-slate-500 mb-2"><?= htmlspecialchars(ucwords(str_replace('_', ' ', $user['role']))) ?></div>
+      <button type="button" id="theme-toggle" class="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700">
+        <span class="dark:hidden"><?= icon_svg('moon', 'w-4 h-4') ?></span>
+        <span class="hidden dark:inline"><?= icon_svg('sun', 'w-4 h-4') ?></span>
+        <span class="dark:hidden">Dark mode</span>
+        <span class="hidden dark:inline">Light mode</span>
+      </button>
+      <a href="<?= htmlspecialchars(url('/logout.php')) ?>" class="block px-3 py-2 rounded-lg text-sm text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/30">Log out</a>
     </div>
   </aside>
   <div class="flex-1 flex flex-col min-w-0">
-    <header class="flex items-center gap-4 px-8 py-3 bg-white border-b border-slate-200 no-print">
+    <header class="flex items-center gap-4 px-8 py-3 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 no-print">
       <div class="relative flex-1 max-w-md">
-        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"><?= icon_svg('search', 'w-4 h-4') ?></span>
-        <input type="text" id="page-search" placeholder="Search this page…" class="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-full focus:outline-none focus:ring-2 focus:ring-accent-500 focus:bg-white">
+        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"><?= icon_svg('search', 'w-4 h-4') ?></span>
+        <input type="text" id="page-search" placeholder="Search this page…" class="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-full focus:outline-none focus:ring-2 focus:ring-accent-500 focus:bg-white dark:focus:bg-slate-900">
       </div>
       <div class="flex items-center gap-3 ml-auto">
-        <div class="relative text-slate-400">
+        <div class="relative text-slate-400 dark:text-slate-500">
           <?= icon_svg('bell', 'w-5 h-5') ?>
           <?php if ($notifCount > 0): ?>
           <span class="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 flex items-center justify-center rounded-full bg-rose-500 text-white text-[10px] font-semibold"><?= $notifCount > 9 ? '9+' : $notifCount ?></span>
           <?php endif; ?>
         </div>
-        <div class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-full text-xs text-slate-500">
+        <div class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-full text-xs text-slate-500 dark:text-slate-400">
           <?= icon_svg('calendar', 'w-3.5 h-3.5') ?>
           <?= htmlspecialchars(date('F j, Y')) ?>
         </div>
         <div class="relative">
           <div class="w-9 h-9 rounded-full <?= avatar_color((int) $user['id']) ?> text-white flex items-center justify-center text-xs font-semibold"><?= htmlspecialchars(avatar_initials($user['full_name'])) ?></div>
-          <span class="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white"></span>
+          <span class="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-white dark:border-slate-800"></span>
         </div>
       </div>
     </header>
     <main class="flex-1 p-8 relative overflow-hidden">
       <div class="deco-blob" aria-hidden="true"></div>
       <div class="relative">
-        <h1 class="text-2xl font-semibold text-slate-800"><?= htmlspecialchars($title) ?></h1>
-        <?php if ($subtitle): ?><p class="text-sm text-slate-500 mt-1 mb-6"><?= htmlspecialchars($subtitle) ?></p><?php else: ?><div class="mb-6"></div><?php endif; ?>
+        <h1 class="text-2xl font-semibold text-slate-800 dark:text-slate-100"><?= htmlspecialchars($title) ?></h1>
+        <?php if ($subtitle): ?><p class="text-sm text-slate-500 dark:text-slate-400 mt-1 mb-6"><?= htmlspecialchars($subtitle) ?></p><?php else: ?><div class="mb-6"></div><?php endif; ?>
 <?php else: ?>
   <main class="flex-1">
 <?php endif; ?>
     <?php foreach (flash_take() as $flash): ?>
-      <div class="mb-4 mx-auto max-w-md px-4 py-3 rounded-lg text-sm <?= $flash['type'] === 'error' ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200' ?>">
+      <div class="mb-4 mx-auto max-w-md px-4 py-3 rounded-lg text-sm <?= $flash['type'] === 'error' ? 'bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800' : 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800' ?>">
         <?= nl2br(htmlspecialchars($flash['message'])) ?>
       </div>
     <?php endforeach; ?>
@@ -272,8 +308,8 @@ function render_footer(): void
     $user = current_user();
     ?>
     <?php if ($user): ?>
-        <footer class="mt-10 pt-4 border-t border-slate-200 text-center text-[11px] text-slate-400 leading-relaxed no-print">
-          <div class="font-semibold text-slate-500">PROJECT TAPAT</div>
+        <footer class="mt-10 pt-4 border-t border-slate-200 dark:border-slate-700 text-center text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed no-print">
+          <div class="font-semibold text-slate-500 dark:text-slate-400">PROJECT TAPAT</div>
           <div>Teacher Assessment, Performance Aggregation and Tracking System</div>
           <div class="italic">&ldquo;Tapat na Marka, Maayos na Proseso, Maaasahang Resulta.&rdquo;</div>
           <div class="mt-1">Created by: Jay Mar V. Canturia, Teacher I</div>
