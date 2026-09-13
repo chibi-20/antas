@@ -26,6 +26,7 @@ render_header('My Section');
       <a href="<?= h(url('/adviser/ranking.php?section_id=' . $sec['id'])) ?>" class="px-3 py-1.5 rounded-lg bg-accent-50 text-accent-700 hover:bg-accent-100">Ranking</a>
       <a href="<?= h(url('/adviser/at_risk.php?section_id=' . $sec['id'])) ?>" class="px-3 py-1.5 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100">At Risk</a>
       <a href="<?= h(url('/adviser/card_slips.php?section_id=' . $sec['id'])) ?>" class="px-3 py-1.5 rounded-lg bg-accent-50 text-accent-700 hover:bg-accent-100">Card Slips</a>
+      <a href="<?= h(url('/adviser/remarks.php?section_id=' . $sec['id'])) ?>" class="px-3 py-1.5 rounded-lg bg-accent-50 text-accent-700 hover:bg-accent-100">Remarks</a>
       <a href="<?= h(url('/adviser/export_csv.php?section_id=' . $sec['id'])) ?>" class="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200">Export CSV</a>
     </div>
   </div>

@@ -63,6 +63,42 @@ html.dark .js-just-pasted {
 
 .slip-empty { border-style: dashed; opacity: 0.3; }
 
+/* "2 per sheet" Card Slips layout (adviser/card_slips.php) — same page size as .print-page,
+   but 1 column x 2 rows instead of 2x2, so each slip is full-width/half-height instead of
+   half-width/half-height. The extra width is what makes room for .slip-remarks below without
+   cramming it into a narrow column. */
+.print-page-2up {
+  display: grid;
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 8mm;
+  width: 190mm;
+  height: 270mm;
+  margin: 0 auto 8mm auto;
+}
+
+.slip-remarks { border-top: 1px dashed #cbd5e1; margin-top: 6px; padding-top: 4px; font-size: 10px; }
+.slip-remarks-label { font-size: 8px; text-transform: uppercase; letter-spacing: 0.03em; color: #94a3b8; margin-bottom: 2px; }
+
+/* The 2-per-sheet slip is roughly double the width of the 4-per-sheet one but was inheriting
+   the exact same (small, tuned-for-a-quarter-page) font sizes from .slip and friends — scaled
+   up here (~35-40%) now that there's the room for it, scoped to this layout only so the
+   original 4-per-sheet slip's tighter fit is never affected. */
+.print-page-2up .slip { font-size: 13px; }
+.print-page-2up .slip-logo { width: 38px; height: 38px; }
+.print-page-2up .slip-deped-line { font-size: 8px; }
+.print-page-2up .slip-school-name { font-size: 9px; }
+.print-page-2up .slip-title { font-size: 16px; }
+.print-page-2up .slip-sub { font-size: 11.5px; }
+.print-page-2up .descriptor { font-size: 10px; }
+.print-page-2up .slip-legend { font-size: 8px; margin-top: 1px; }
+.print-page-2up .slip-remarks { font-size: 11.5px; margin-top: 3px; padding-top: 2px; }
+.print-page-2up .slip-remarks-label { font-size: 9px; }
+.print-page-2up .slip-table th, .print-page-2up .slip-table td { padding: 0px 4px; line-height: 1.15; }
+.print-page-2up .slip-header { margin-bottom: 3px; padding-bottom: 2px; }
+.print-page-2up .slip-student { margin-bottom: 3px; line-height: 1.25; }
+.print-page-2up .slip-footer { margin-top: 3px; padding-top: 2px; }
+
 .slip-header { display: flex; align-items: center; gap: 6px; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; margin-bottom: 6px; }
 .slip-logo { width: 34px; height: 34px; object-fit: contain; flex-shrink: 0; }
 .slip-header-text { flex: 1; text-align: center; }
@@ -84,6 +120,6 @@ html.dark .js-just-pasted {
 @media print {
   .no-print { display: none !important; }
   body { background: white !important; }
-  .print-page { page-break-after: always; margin: 0; width: auto; height: auto; }
+  .print-page, .print-page-2up { page-break-after: always; margin: 0; width: auto; height: auto; }
   @page { size: A4 portrait; margin: 10mm; }
 }

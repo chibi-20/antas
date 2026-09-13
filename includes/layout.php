@@ -116,6 +116,7 @@ function nav_items(array $user): array
             'School Years' => 'admin/school_years.php',
             'Grade Levels' => 'admin/grade_levels.php',
             'Majors' => 'admin/majors.php',
+            'Remarks' => 'admin/remarks.php',
             'Sections' => 'admin/sections.php',
             'Subjects' => 'admin/subjects.php',
             'Weight Profiles' => 'admin/weight_profiles.php',
@@ -155,11 +156,13 @@ function nav_items(array $user): array
             $items['Ranking'] = 'adviser/ranking.php?section_id=' . $sid;
             $items['At Risk'] = 'adviser/at_risk.php?section_id=' . $sid;
             $items['Card Slips'] = 'adviser/card_slips.php?section_id=' . $sid;
+            $items['Remarks'] = 'adviser/remarks.php?section_id=' . $sid;
         } else {
             $items['Consolidated Grades'] = 'adviser/index.php';
             $items['Ranking'] = 'adviser/index.php';
             $items['At Risk'] = 'adviser/index.php';
             $items['Card Slips'] = 'adviser/index.php';
+            $items['Remarks'] = 'adviser/index.php';
         }
     }
 

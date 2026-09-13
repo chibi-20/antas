@@ -652,3 +652,18 @@ function initFailReasonToggle() {
     });
   });
 }
+
+/** adviser/remarks.php's per-student "Other, specify" textarea (plus its character-limit hint,
+ * hence toggling a wrapper div rather than the textarea alone) — same shape as
+ * initFailReasonToggle() above, kept as its own function since the two pickers are unrelated
+ * features. */
+function initRemarkToggle() {
+  document.querySelectorAll('.js-remark-select').forEach(function (select) {
+    var studentId = select.getAttribute('data-student-id');
+    var wrap = document.querySelector('.js-remark-other-wrap[data-other-for="' + studentId + '"]');
+    if (!wrap) return;
+    select.addEventListener('change', function () {
+      wrap.classList.toggle('hidden', select.value !== 'other');
+    });
+  });
+}
