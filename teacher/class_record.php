@@ -800,7 +800,13 @@ window.addEventListener('DOMContentLoaded', function () {
         return tr.getBoundingClientRect().top - root.getBoundingClientRect().top;
       });
 
-      var canvas = await html2canvas(root, { scale: SCALE, backgroundColor: '#ffffff' });
+      // The page's <main> has overflow:hidden (keeps the sidebar layout from breaking on any
+      // stray wide content), which silently clips html2canvas's capture to whatever width
+      // happened to be visible — cutting off the right-hand columns on any class record wide
+      // enough to need them. windowWidth forces html2canvas to render in its own off-screen
+      // clone sized to the print table's true content width, unaffected by that clipping.
+      var neededWidth = Math.ceil(root.scrollWidth) + 40;
+      var canvas = await html2canvas(root, { scale: SCALE, backgroundColor: '#ffffff', windowWidth: neededWidth, width: neededWidth });
 
       var pageWidthMm = 277, pageHeightMm = 190; // A4 landscape minus 10mm margins
       var pxPerMm = canvas.width / pageWidthMm;
