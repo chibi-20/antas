@@ -127,7 +127,8 @@ function recompute_term_grade(int $studentId, int $subjectId, int $term, int $sc
           AND sst.is_active = 1
           AND (sst.term_scope = 0 OR sst.term_scope = ?)
           AND sst.sex_scope = 'ALL'
-        ORDER BY (sst.term_scope <> 0) DESC, sst.id DESC
+          AND (sst.major_id IS NULL OR sst.major_id = st.major_id)
+        ORDER BY (sst.term_scope <> 0) DESC, (sst.major_id IS NOT NULL) DESC, sst.id DESC
         LIMIT 1");
     $stmt->execute([$studentId, $subjectId, $schoolYearId, $term]);
     $sstId = $stmt->fetchColumn();
@@ -251,7 +252,7 @@ function recompute_compound_term_grade(int $studentId, int $parentSubjectId, int
 function recompute_term_grades_for_assignment(int $sectionSubjectTeacherId, int $term): void
 {
     $pdo = db();
-    $stmt = $pdo->prepare('SELECT subject_id, school_year_id, section_id, sex_scope FROM section_subject_teachers WHERE id = ?');
+    $stmt = $pdo->prepare('SELECT subject_id, school_year_id, section_id, sex_scope, major_id FROM section_subject_teachers WHERE id = ?');
     $stmt->execute([$sectionSubjectTeacherId]);
     $sst = $stmt->fetch();
     if (!$sst) {
@@ -268,16 +269,14 @@ function recompute_term_grades_for_assignment(int $sectionSubjectTeacherId, int 
 $sexScope = strtoupper(trim((string) ($sst['sex_scope'] ?? 'ALL')));
 
 if ($sexScope === 'ALL') {
-    $students = $pdo->prepare('
-        SELECT id
-        FROM students
-        WHERE section_id = ?
-          AND is_active = 1
-    ');
-
-    $students->execute([
-        $sst['section_id'],
-    ]);
+    $sql = 'SELECT id FROM students WHERE section_id = ? AND is_active = 1';
+    $params = [$sst['section_id']];
+    if ($sst['major_id'] !== null) {
+        $sql .= ' AND major_id = ?';
+        $params[] = $sst['major_id'];
+    }
+    $students = $pdo->prepare($sql);
+    $students->execute($params);
 } elseif ($sexScope === 'MIX') {
     // No section/sex filter needed at all — sst_student_claims already scopes exactly to
     // this assignment.

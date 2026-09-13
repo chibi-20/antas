@@ -8,30 +8,33 @@ $user = require_role(['subject_teacher']);
 $pdo = db();
 $year = require_active_school_year();
 
-$stmt = $pdo->prepare('SELECT sst.id, sst.section_id, sst.subject_id, sst.term_scope, sst.sex_scope,
-        gl.name AS grade_level, sec.section_name, sub.subject_name
+$stmt = $pdo->prepare('SELECT sst.id, sst.section_id, sst.subject_id, sst.term_scope, sst.sex_scope, sst.major_id,
+        gl.name AS grade_level, sec.section_name, sub.subject_name, maj.major_name
     FROM section_subject_teachers sst
     JOIN sections sec ON sec.id = sst.section_id
     JOIN grade_levels gl ON gl.id = sec.grade_level_id
     JOIN subjects sub ON sub.id = sst.subject_id
+    LEFT JOIN majors maj ON maj.id = sst.major_id
     WHERE sst.teacher_id = ? AND sst.school_year_id = ? AND sst.is_active = 1
     ORDER BY gl.sort_order, sec.section_name, sub.subject_name, sst.sex_scope, sst.term_scope');
 $stmt->execute([$user['id'], $year['id']]);
 $rows = $stmt->fetchAll();
 
 // A teacher can hold several sst rows for the same section+subject — one per term (TLE-style
-// mid-year teacher changes) and/or split by sex. Group into one card per (section, subject,
-// sex_scope), and resolve each term's link to whichever of the teacher's own rows in that
-// group actually covers it, instead of always linking the first row regardless of term.
+// mid-year teacher changes), split by sex, or (Special Program sections) by major. Group into
+// one card per (section, subject, sex_scope, major_id), and resolve each term's link to
+// whichever of the teacher's own rows in that group actually covers it, instead of always
+// linking the first row regardless of term.
 $assignments = [];
 foreach ($rows as $r) {
-    $key = $r['section_id'] . '|' . $r['subject_id'] . '|' . $r['sex_scope'];
+    $key = $r['section_id'] . '|' . $r['subject_id'] . '|' . $r['sex_scope'] . '|' . ($r['major_id'] ?? 0);
     if (!isset($assignments[$key])) {
         $assignments[$key] = [
             'grade_level' => $r['grade_level'],
             'section_name' => $r['section_name'],
             'subject_name' => $r['subject_name'],
             'sex_scope' => $r['sex_scope'],
+            'major_name' => $r['major_name'],
             'term_sst' => [1 => null, 2 => null, 3 => null],
         ];
     }
@@ -101,7 +104,7 @@ render_header('My Classes', 'Manage and monitor the progress of your classes.');
     </div>
     <div class="p-6">
       <?php
-        $scopeLabel = match ($a['sex_scope']) {
+        $scopeLabel = $a['major_name'] !== null ? $a['major_name'] . ' major' : match ($a['sex_scope']) {
             'M' => 'Male only',
             'F' => 'Female only',
             'MIX' => 'Mix — ' . $mixClaimCount($a['term_sst']) . ' students',

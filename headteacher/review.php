@@ -98,8 +98,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // column's stored collation genuinely matches (see db/fix_sex_scope_collation.php).
             $sexScopeForSnapshot = strtoupper(trim((string) ($assignment['sex_scope'] ?? 'ALL')));
             if ($sexScopeForSnapshot === 'ALL') {
-                $studentsStmt = $pdo->prepare('SELECT id FROM students WHERE section_id = ? AND is_active = 1');
-                $studentsStmt->execute([$assignment['section_id']]);
+                $sql = 'SELECT id FROM students WHERE section_id = ? AND is_active = 1';
+                $params = [$assignment['section_id']];
+                if ($assignment['major_id'] !== null) {
+                    $sql .= ' AND major_id = ?';
+                    $params[] = $assignment['major_id'];
+                }
+                $studentsStmt = $pdo->prepare($sql);
+                $studentsStmt->execute($params);
             } elseif ($sexScopeForSnapshot === 'MIX') {
                 $studentsStmt = $pdo->prepare('SELECT student_id AS id FROM sst_student_claims WHERE section_subject_teacher_id = ?');
                 $studentsStmt->execute([$sstId]);
@@ -151,8 +157,15 @@ foreach ($items as $item) {
 // plain queries rather than "(? = 'ALL' OR sex = ?)" — see the matching comment above.
 $sexScope = strtoupper(trim((string) ($assignment['sex_scope'] ?? 'ALL')));
 if ($sexScope === 'ALL') {
-    $students = $pdo->prepare("SELECT * FROM students WHERE section_id = ? AND is_active = 1 ORDER BY FIELD(sex, 'M', 'F'), full_name");
-    $students->execute([$assignment['section_id']]);
+    $sql = "SELECT * FROM students WHERE section_id = ? AND is_active = 1";
+    $params = [$assignment['section_id']];
+    if ($assignment['major_id'] !== null) {
+        $sql .= " AND major_id = ?";
+        $params[] = $assignment['major_id'];
+    }
+    $sql .= " ORDER BY FIELD(sex, 'M', 'F'), full_name";
+    $students = $pdo->prepare($sql);
+    $students->execute($params);
 } elseif ($sexScope === 'MIX') {
     $students = $pdo->prepare("SELECT st.* FROM students st
         JOIN sst_student_claims ssc ON ssc.student_id = st.id AND ssc.section_subject_teacher_id = ?

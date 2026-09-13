@@ -14,6 +14,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $gradeLevelId = (int) ($_POST['grade_level_id'] ?? 0);
     $sectionName = trim((string) ($_POST['section_name'] ?? ''));
     $adviserId = (int) ($_POST['adviser_id'] ?? 0) ?: null;
+    $isSpecialProgram = isset($_POST['is_special_program']) ? 1 : 0;
     $err = ($schoolYearId === 0 || $gradeLevelId === 0 || $sectionName === '') ? 'School year, grade level, and section name are required.' : null;
 
     if ($action === 'create') {
@@ -21,8 +22,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash_set('error', $err);
         } else {
             try {
-                $pdo->prepare('INSERT INTO sections (school_year_id, grade_level_id, section_name, adviser_id) VALUES (?, ?, ?, ?)')
-                    ->execute([$schoolYearId, $gradeLevelId, $sectionName, $adviserId]);
+                $pdo->prepare('INSERT INTO sections (school_year_id, grade_level_id, section_name, adviser_id, is_special_program) VALUES (?, ?, ?, ?, ?)')
+                    ->execute([$schoolYearId, $gradeLevelId, $sectionName, $adviserId, $isSpecialProgram]);
                 flash_set('success', "Section \"$sectionName\" created.");
             } catch (PDOException $e) {
                 flash_set('error', 'Could not create section — this school year/grade level/name combination may already exist.');
@@ -34,8 +35,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash_set('error', $err);
         } else {
             try {
-                $pdo->prepare('UPDATE sections SET school_year_id=?, grade_level_id=?, section_name=?, adviser_id=? WHERE id=?')
-                    ->execute([$schoolYearId, $gradeLevelId, $sectionName, $adviserId, $id]);
+                $pdo->prepare('UPDATE sections SET school_year_id=?, grade_level_id=?, section_name=?, adviser_id=?, is_special_program=? WHERE id=?')
+                    ->execute([$schoolYearId, $gradeLevelId, $sectionName, $adviserId, $isSpecialProgram, $id]);
                 flash_set('success', 'Section updated.');
             } catch (PDOException $e) {
                 flash_set('error', 'Could not update section — this school year/grade level/name combination may already exist.');
@@ -137,6 +138,10 @@ render_header('Sections');
       <?= select_options(available_advisers($advisers, $takenAdviserIds, $editing['adviser_id'] ?? null), 'id', 'full_name', $editing['adviser_id'] ?? null) ?>
     </select>
     <p class="text-xs text-slate-400 -mt-3 mb-4">Teachers already advising another section this year aren't listed.</p>
+    <label class="flex items-center gap-2 mb-4 text-sm text-slate-600">
+      <input type="checkbox" name="is_special_program" value="1" <?= !empty($editing['is_special_program']) ? 'checked' : '' ?>>
+      Special Program section (students have individual majors — e.g. Special Program for the Arts/Journalism)
+    </label>
     <div class="flex gap-2">
       <button type="submit" class="bg-accent-600 hover:bg-accent-700 text-white font-medium px-4 py-2 rounded-lg text-sm"><?= $editing ? 'Save Changes' : 'Add' ?></button>
       <?php if ($editing): ?><a href="<?= h(url('/admin/sections.php')) ?>" class="px-4 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-100">Cancel</a><?php endif; ?>
@@ -175,7 +180,7 @@ render_header('Sections');
     <tbody class="divide-y divide-slate-100">
       <?php foreach ($group['sections'] as $sec): ?>
       <tr>
-        <td class="px-4 py-3 font-medium"><?= h($sec['section_name']) ?></td>
+        <td class="px-4 py-3 font-medium"><?= h($sec['section_name']) ?><?php if ($sec['is_special_program']): ?> <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-700">Special Program</span><?php endif; ?></td>
         <td class="px-4 py-3">
           <form method="post">
             <?= csrf_field() ?>

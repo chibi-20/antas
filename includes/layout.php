@@ -115,6 +115,7 @@ function nav_items(array $user): array
             'Dashboard' => 'admin/dashboard.php',
             'School Years' => 'admin/school_years.php',
             'Grade Levels' => 'admin/grade_levels.php',
+            'Majors' => 'admin/majors.php',
             'Sections' => 'admin/sections.php',
             'Subjects' => 'admin/subjects.php',
             'Weight Profiles' => 'admin/weight_profiles.php',

@@ -117,6 +117,7 @@ if ($subjectId && in_array($subjectId, $supervisedSubjectPickerIds, true)) {
             WHERE sst.subject_id = ? AND sst.school_year_id = ? AND sst.is_active = 1 AND ss.status = "published"
               AND (sst.term_scope = 0 OR sst.term_scope = ?)
               AND sst.sex_scope = "ALL"
+              AND (sst.major_id IS NULL OR sst.major_id = st.major_id)
             UNION ALL
             SELECT sec.id AS section_id, sec.section_name, gl.id AS grade_level_id, gl.name AS grade_level, gl.sort_order,
                 st.id AS student_id, st.sex, tg.transmuted_grade

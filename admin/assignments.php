@@ -42,19 +42,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
         }
+
+        // A major-scoped assignment (Special Program sections, db/migrations/0019) restricts
+        // this subject to students of one major — mutually exclusive with M/F/MIX, so picking
+        // a major always forces sex_scope back to ALL server-side too (the form's own JS
+        // already does this, this is just defense in depth against a crafted request).
+        $majorId = (int) ($_POST['major_id'] ?? 0) ?: null;
+        if (!$err && $majorId !== null) {
+            $sexScope = 'ALL';
+            $sectionCheck = $pdo->prepare('SELECT is_special_program FROM sections WHERE id = ?');
+            $sectionCheck->execute([$sectionId]);
+            if (!$sectionCheck->fetchColumn()) {
+                $err = 'A major can only be set for a Special Program section — tag the section first on the Sections page.';
+            } else {
+                $majorCheck = $pdo->prepare('SELECT is_active FROM majors WHERE id = ?');
+                $majorCheck->execute([$majorId]);
+                $majorActive = $majorCheck->fetchColumn();
+                if ($majorActive === false || !$majorActive) {
+                    $err = 'Invalid or inactive major.';
+                } else {
+                    // Compound subjects (e.g. MAPEH's Music-Arts/PE-Health) are never
+                    // major-scoped — effective_term_grades' compound-parent branch has no
+                    // major awareness, so one major's unpublished status would incorrectly
+                    // gate every other major's merged average.
+                    $subjectCheck = $pdo->prepare('SELECT parent_subject_id FROM subjects WHERE id = ?');
+                    $subjectCheck->execute([$subjectId]);
+                    $parentSubjectId = $subjectCheck->fetchColumn();
+                    if ($parentSubjectId !== false && $parentSubjectId !== null) {
+                        $err = 'A major cannot be set on a compound subject component (e.g. a MAPEH component) — pick a different subject.';
+                    }
+                }
+            }
+        }
     }
 
     if ($action === 'create') {
         if (!$err) {
-            $err = sst_scope_conflict($pdo, $sectionId, $subjectId, $schoolYearId, $termScope, $sexScope, null, $studentIds);
+            $err = sst_scope_conflict($pdo, $sectionId, $subjectId, $schoolYearId, $termScope, $sexScope, null, $studentIds, $majorId);
         }
         if ($err) {
             flash_set('error', $err);
         } else {
             try {
                 $pdo->beginTransaction();
-                $pdo->prepare("INSERT INTO section_subject_teachers (section_id, subject_id, teacher_id, created_via, school_year_id, term_scope, sex_scope) VALUES (?, ?, ?, 'admin', ?, ?, ?)")
-                    ->execute([$sectionId, $subjectId, $teacherId, $schoolYearId, $termScope, $sexScope]);
+                $pdo->prepare("INSERT INTO section_subject_teachers (section_id, subject_id, teacher_id, created_via, school_year_id, term_scope, sex_scope, major_id) VALUES (?, ?, ?, 'admin', ?, ?, ?, ?)")
+                    ->execute([$sectionId, $subjectId, $teacherId, $schoolYearId, $termScope, $sexScope, $majorId]);
                 $sstId = (int) $pdo->lastInsertId();
                 if ($sexScope === 'MIX') {
                     $claimStmt = $pdo->prepare('INSERT INTO sst_student_claims (section_subject_teacher_id, student_id) VALUES (?, ?)');
@@ -83,8 +115,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $err = 'Assignment not found.';
             } else {
                 $newStudentIds = ($oldRow['sex_scope'] === 'MIX' && $sexScope === 'MIX') ? $studentIds : null;
-                $err = sst_narrowing_blocked($pdo, $oldRow, $termScope, $sexScope, $newStudentIds)
-                    ?? sst_scope_conflict($pdo, $sectionId, $subjectId, $schoolYearId, $termScope, $sexScope, $id, $studentIds);
+                $err = sst_narrowing_blocked($pdo, $oldRow, $termScope, $sexScope, $newStudentIds, $majorId)
+                    ?? sst_scope_conflict($pdo, $sectionId, $subjectId, $schoolYearId, $termScope, $sexScope, $id, $studentIds, $majorId);
             }
         }
         if ($err) {
@@ -92,8 +124,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             try {
                 $pdo->beginTransaction();
-                $pdo->prepare('UPDATE section_subject_teachers SET section_id=?, subject_id=?, teacher_id=?, school_year_id=?, term_scope=?, sex_scope=? WHERE id=?')
-                    ->execute([$sectionId, $subjectId, $teacherId, $schoolYearId, $termScope, $sexScope, $id]);
+                $pdo->prepare('UPDATE section_subject_teachers SET section_id=?, subject_id=?, teacher_id=?, school_year_id=?, term_scope=?, sex_scope=?, major_id=? WHERE id=?')
+                    ->execute([$sectionId, $subjectId, $teacherId, $schoolYearId, $termScope, $sexScope, $majorId, $id]);
                 // Full replace is simplest and correct at these list sizes — delete then
                 // re-insert rather than diffing, mirroring how the rest of this codebase
                 // prefers a plain rewrite over incremental patching when the data is small.
@@ -164,9 +196,10 @@ $subjects = $pdo->query("SELECT * FROM subjects WHERE is_active = 1
     ORDER BY subject_name")->fetchAll();
 $teachers = $pdo->query("SELECT * FROM users WHERE role = 'subject_teacher' AND is_active = 1 ORDER BY full_name")->fetchAll();
 $gradeLevels = $pdo->query('SELECT * FROM grade_levels WHERE is_active = 1 ORDER BY sort_order')->fetchAll();
-$sectionLabels = array_map(fn($s) => ['id' => $s['id'], 'label' => $s['grade_level'] . ' - ' . $s['section_name'] . ' (' . $s['year_label'] . ')'], $sections);
+$sectionLabels = array_map(fn($s) => ['id' => $s['id'], 'label' => $s['grade_level'] . ' - ' . $s['section_name'] . ' (' . $s['year_label'] . ')', 'is_special_program' => (int) $s['is_special_program']], $sections);
+$majors = $pdo->query('SELECT * FROM majors WHERE is_active = 1 ORDER BY major_name')->fetchAll();
 
-$assignments = $pdo->query('SELECT sst.*, gl.name AS grade_level, sec.section_name, sub.subject_name, u.full_name AS teacher_name, sy.year_label,
+$assignments = $pdo->query('SELECT sst.*, gl.name AS grade_level, sec.section_name, sub.subject_name, u.full_name AS teacher_name, sy.year_label, maj.major_name,
         (SELECT COUNT(*) FROM sst_student_claims ssc WHERE ssc.section_subject_teacher_id = sst.id) AS mix_claim_count
     FROM section_subject_teachers sst
     JOIN sections sec ON sec.id = sst.section_id
@@ -174,6 +207,7 @@ $assignments = $pdo->query('SELECT sst.*, gl.name AS grade_level, sec.section_na
     JOIN subjects sub ON sub.id = sst.subject_id
     JOIN users u ON u.id = sst.teacher_id
     JOIN school_years sy ON sy.id = sst.school_year_id
+    LEFT JOIN majors maj ON maj.id = sst.major_id
     ORDER BY sy.year_label DESC, gl.sort_order, sec.section_name, sub.subject_name')->fetchAll();
 
 $eligibility = $pdo->query('SELECT ce.*, u.full_name AS teacher_name, sub.subject_name, gl.name AS grade_level, sy.year_label
@@ -315,8 +349,11 @@ render_header('Subject Assignments');
         <?= select_options($schoolYears, 'id', 'year_label', $editing['school_year_id'] ?? (active_school_year()['id'] ?? null)) ?>
       </select>
       <label class="block text-sm font-medium text-slate-600 mb-1">Section</label>
-      <select name="section_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
-        <?= select_options($sectionLabels, 'id', 'label', $editing['section_id'] ?? null) ?>
+      <?php $curSectionId = (string) ($editing['section_id'] ?? ''); ?>
+      <select name="section_id" required data-special-target="assignment-major-field" class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+        <?php foreach ($sectionLabels as $sl): ?>
+          <option value="<?= h($sl['id']) ?>" data-special="<?= $sl['is_special_program'] ?>" <?= (string) $sl['id'] === $curSectionId ? 'selected' : '' ?>><?= h($sl['label']) ?></option>
+        <?php endforeach; ?>
       </select>
       <label class="block text-sm font-medium text-slate-600 mb-1">Subject</label>
       <select name="subject_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
@@ -326,6 +363,14 @@ render_header('Subject Assignments');
       <select name="teacher_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg js-searchable" data-placeholder="Search teachers…">
         <?= select_options($teachers, 'id', 'full_name', $editing['teacher_id'] ?? null) ?>
       </select>
+      <div id="assignment-major-field" hidden class="mb-4">
+        <label class="block text-sm font-medium text-slate-600 mb-1">Major</label>
+        <select name="major_id" data-major-select="#assignment-sex-scope" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+          <option value="">Not major-specific</option>
+          <?= select_options($majors, 'id', 'major_name', $editing['major_id'] ?? null) ?>
+        </select>
+        <p class="text-xs text-slate-400 mt-1">Special Program section only — restricts this subject to students of the chosen major, so several teachers can each cover one major of the same subject/section. Leave blank for a subject every student in this section takes.</p>
+      </div>
       <div class="grid grid-cols-2 gap-3 mb-4">
         <div>
           <label class="block text-sm font-medium text-slate-600 mb-1">Term</label>
@@ -340,7 +385,7 @@ render_header('Subject Assignments');
         <div>
           <label class="block text-sm font-medium text-slate-600 mb-1">Applies To</label>
           <?php $curSexScope = $editing['sex_scope'] ?? 'ALL'; ?>
-          <select name="sex_scope" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+          <select name="sex_scope" id="assignment-sex-scope" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
             <option value="ALL" <?= $curSexScope === 'ALL' ? 'selected' : '' ?>>All Students</option>
             <option value="M" <?= $curSexScope === 'M' ? 'selected' : '' ?>>Male Only</option>
             <option value="F" <?= $curSexScope === 'F' ? 'selected' : '' ?>>Female Only</option>
@@ -478,13 +523,17 @@ render_header('Subject Assignments');
             <td class="px-4 py-3"><a href="<?= h(url('/admin/assignments.php?teacher_id=' . $a['teacher_id'])) ?>" class="text-accent-600 hover:underline"><?= h($a['teacher_name']) ?></a></td>
             <td class="px-4 py-3 text-slate-500"><?= (int) $a['term_scope'] === 0 ? 'All Terms' : 'Term ' . (int) $a['term_scope'] ?></td>
             <td class="px-4 py-3 text-slate-500"><?php
-              echo match ($a['sex_scope']) {
-                  'ALL' => 'All Students',
-                  'M' => 'Male Only',
-                  'F' => 'Female Only',
-                  'MIX' => 'Mix (' . (int) $a['mix_claim_count'] . ' students)',
-                  default => h($a['sex_scope']),
-              };
+              if ($a['major_name'] !== null) {
+                  echo h($a['major_name']) . ' major';
+              } else {
+                  echo match ($a['sex_scope']) {
+                      'ALL' => 'All Students',
+                      'M' => 'Male Only',
+                      'F' => 'Female Only',
+                      'MIX' => 'Mix (' . (int) $a['mix_claim_count'] . ' students)',
+                      default => h($a['sex_scope']),
+                  };
+              }
             ?></td>
             <td class="px-4 py-3"><?= $a['created_via'] === 'self_claim' ? '<span class="text-amber-600">Self-claimed</span>' : '<span class="text-slate-400">Admin</span>' ?></td>
             <td class="px-4 py-3"><?= $a['is_active'] ? '<span class="text-emerald-600">Active</span>' : '<span class="text-slate-400">Inactive</span>' ?></td>
@@ -501,6 +550,8 @@ render_header('Subject Assignments');
 <script>
 window.addEventListener('DOMContentLoaded', function () {
   initSectionLookupSearch();
+  initSpecialSectionToggle();
+  initMajorSexScopeLock();
 });
 </script>
 

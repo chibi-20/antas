@@ -207,7 +207,7 @@ function get_consolidated_data(int $sectionId, int $schoolYearId, int $term): ar
     // relevant to the requested term (term_scope=0 means "every term"). Every matching row is
     // accumulated into that subject's 'assignments' list rather than the old one-row-per-
     // subject assumption, which used to silently let a later row clobber an earlier one.
-    $rows = $pdo->prepare('SELECT sst.id AS sst_id, sst.sex_scope, sub.id AS subject_id, sub.subject_name, sub.parent_subject_id, sub.sort_order, ss.status
+    $rows = $pdo->prepare('SELECT sst.id AS sst_id, sst.sex_scope, sst.major_id, sub.id AS subject_id, sub.subject_name, sub.parent_subject_id, sub.sort_order, ss.status
         FROM section_subject_teachers sst
         JOIN subjects sub ON sub.id = sst.subject_id
         LEFT JOIN submission_status ss ON ss.section_subject_teacher_id = sst.id AND ss.term = ?
@@ -222,7 +222,12 @@ function get_consolidated_data(int $sectionId, int $schoolYearId, int $term): ar
     foreach ($rows as $row) {
         $sid = (int) $row['subject_id'];
         $subjectMeta[$sid] = ['subject_name' => $row['subject_name'], 'parent_subject_id' => $row['parent_subject_id'], 'sort_order' => (int) $row['sort_order']];
-        $assignmentsBySubject[$sid][] = ['sst_id' => (int) $row['sst_id'], 'sex_scope' => $row['sex_scope'], 'status' => $row['status'] ?? 'not_started'];
+        $assignmentsBySubject[$sid][] = [
+            'sst_id' => (int) $row['sst_id'],
+            'sex_scope' => $row['sex_scope'],
+            'major_id' => $row['major_id'] !== null ? (int) $row['major_id'] : null,
+            'status' => $row['status'] ?? 'not_started',
+        ];
         if ($row['sex_scope'] === 'MIX') {
             $mixSstIds[] = (int) $row['sst_id'];
         }
@@ -351,12 +356,14 @@ function get_consolidated_data(int $sectionId, int $schoolYearId, int $term): ar
         // UNION ALL needs no de-duplication.
         $stmt = $pdo->prepare("SELECT tg.student_id, tg.term, tg.subject_id, tg.transmuted_grade
             FROM term_grades tg
+            JOIN students st ON st.id = tg.student_id
             JOIN section_subject_teachers sst ON sst.subject_id = tg.subject_id AND sst.school_year_id = tg.school_year_id
             JOIN submission_status ss ON ss.section_subject_teacher_id = sst.id AND ss.term = tg.term
             WHERE ss.status = 'published' AND sst.section_id = ? AND tg.school_year_id = ?
               AND sst.is_active = 1
               AND (sst.term_scope = 0 OR sst.term_scope = tg.term)
               AND sst.sex_scope = 'ALL'
+              AND (sst.major_id IS NULL OR sst.major_id = st.major_id)
               AND tg.term IN ($termsPlaceholders) AND tg.subject_id IN ($childPlaceholders)
             UNION ALL
             SELECT tg.student_id, tg.term, tg.subject_id, tg.transmuted_grade
@@ -439,11 +446,24 @@ function get_consolidated_data(int $sectionId, int $schoolYearId, int $term): ar
  * be published for one half and still pending for the other — "is this subject published"
  * stopped being a single fact per subject the moment more than one assignment can cover it.
  *
- * @param array{assignments: array<int, array{sst_id:int, sex_scope:string, status:string}>} $subject
- * @param array{sex: string} $student
+ * A major-scoped assignment (Special Program sections, db/migrations/0019) is always
+ * sex_scope='ALL' with major_id set — checked first, ahead of any generic (major_id null)
+ * ALL row, so a special section can carry both a major-specific and a leftover generic
+ * assignment without the generic one accidentally winning for a student who has a major.
+ *
+ * @param array{assignments: array<int, array{sst_id:int, sex_scope:string, major_id:?int, status:string}>} $subject
+ * @param array{sex: string, major_id?: ?int} $student
  */
 function subject_assignment_for_student(array $subject, array $student): ?array
 {
+    $studentMajorId = $student['major_id'] ?? null;
+    if ($studentMajorId !== null) {
+        foreach ($subject['assignments'] as $assignment) {
+            if (($assignment['major_id'] ?? null) === (int) $studentMajorId) {
+                return $assignment;
+            }
+        }
+    }
     foreach ($subject['assignments'] as $assignment) {
         if ($assignment['sex_scope'] === 'MIX') {
             if (in_array((int) $student['id'], $assignment['claimed_student_ids'] ?? [], true)) {
@@ -456,7 +476,7 @@ function subject_assignment_for_student(array $subject, array $student): ?array
         }
     }
     foreach ($subject['assignments'] as $assignment) {
-        if ($assignment['sex_scope'] === 'ALL') {
+        if ($assignment['sex_scope'] === 'ALL' && ($assignment['major_id'] ?? null) === null) {
             return $assignment;
         }
     }
@@ -470,7 +490,7 @@ function subject_assignment_for_student(array $subject, array $student): ?array
  * pass its $sstId (MIX reads sst_student_claims). For a not-yet-inserted candidate claim, pass
  * $explicitStudentIds instead (only meaningful when $sexScope === 'MIX').
  */
-function resolve_covered_student_ids(PDO $pdo, int $sectionId, string $sexScope, ?int $sstId = null, array $explicitStudentIds = []): array
+function resolve_covered_student_ids(PDO $pdo, int $sectionId, string $sexScope, ?int $sstId = null, array $explicitStudentIds = [], ?int $majorId = null): array
 {
     if ($sexScope === 'MIX') {
         if ($sstId !== null) {
@@ -485,6 +505,10 @@ function resolve_covered_student_ids(PDO $pdo, int $sectionId, string $sexScope,
     if ($sexScope !== 'ALL') {
         $sql .= ' AND sex = ?';
         $params[] = $sexScope;
+    }
+    if ($majorId !== null) {
+        $sql .= ' AND major_id = ?';
+        $params[] = $majorId;
     }
     $stmt = $pdo->prepare($sql);
     $stmt->execute($params);
@@ -505,9 +529,9 @@ function resolve_covered_student_ids(PDO $pdo, int $sectionId, string $sexScope,
  * specific-term row, or two rows whose actual covered students overlap. Returns an error
  * message if there's a conflict, null if clear.
  */
-function sst_scope_conflict(PDO $pdo, int $sectionId, int $subjectId, int $schoolYearId, int $termScope, string $sexScope, ?int $excludeId = null, array $explicitStudentIds = []): ?string
+function sst_scope_conflict(PDO $pdo, int $sectionId, int $subjectId, int $schoolYearId, int $termScope, string $sexScope, ?int $excludeId = null, array $explicitStudentIds = [], ?int $majorId = null): ?string
 {
-    $sql = 'SELECT id, term_scope, sex_scope FROM section_subject_teachers
+    $sql = 'SELECT id, term_scope, sex_scope, major_id FROM section_subject_teachers
         WHERE section_id = ? AND subject_id = ? AND school_year_id = ? AND is_active = 1';
     $params = [$sectionId, $subjectId, $schoolYearId];
     if ($excludeId !== null) {
@@ -527,16 +551,17 @@ function sst_scope_conflict(PDO $pdo, int $sectionId, int $subjectId, int $schoo
 
     $sameTermRows = array_values(array_filter($existing, fn($row) => (int) $row['term_scope'] === $termScope));
     if ($sameTermRows) {
-        $newIds = resolve_covered_student_ids($pdo, $sectionId, $sexScope, null, $explicitStudentIds);
+        $newIds = resolve_covered_student_ids($pdo, $sectionId, $sexScope, null, $explicitStudentIds, $majorId);
         $newSet = array_flip($newIds);
         foreach ($sameTermRows as $row) {
-            $existingIds = resolve_covered_student_ids($pdo, $sectionId, $row['sex_scope'], (int) $row['id']);
+            $rowMajorId = $row['major_id'] !== null ? (int) $row['major_id'] : null;
+            $existingIds = resolve_covered_student_ids($pdo, $sectionId, $row['sex_scope'], (int) $row['id'], [], $rowMajorId);
             if (array_intersect_key($newSet, array_flip($existingIds))) {
-                // Keep the friendlier, specific wording when both sides are plain ALL/M/F
-                // (matches the exact messages this function has always returned); fall back to
-                // a generic message once MIX is involved on either side, since "which specific
-                // students overlap" is more useful there than a category name.
-                if ($sexScope !== 'MIX' && $row['sex_scope'] !== 'MIX') {
+                // Keep the friendlier, specific wording only when neither side involves MIX or
+                // a major (matches the exact messages this function has always returned);
+                // fall back to a generic message otherwise, since "which specific students
+                // overlap" is more useful there than a category name.
+                if ($sexScope !== 'MIX' && $row['sex_scope'] !== 'MIX' && $majorId === null && $rowMajorId === null) {
                     if ($sexScope === 'ALL' || $row['sex_scope'] === 'ALL') {
                         return 'This term already has an assignment for this section/subject that covers all students — deactivate it first.';
                     }
@@ -557,12 +582,16 @@ function sst_scope_conflict(PDO $pdo, int $sectionId, int $subjectId, int $schoo
  * would silently orphan scores/status rows that belong to terms/students the row no longer
  * covers; that's a data-integrity decision for the admin to resolve manually (e.g. deactivate
  * and recreate), not something to patch up. $newStudentIds is only meaningful (and only
- * checked) when both the old and new sex_scope are 'MIX' — pass null otherwise.
+ * checked) when both the old and new sex_scope are 'MIX' — pass null otherwise. A changed
+ * $newMajorId (switching majors, or adding/removing one) is treated as narrowing too, even
+ * though it's a lateral move rather than strictly narrower — it just as surely orphans the
+ * old major's roster's scores once real data exists.
  */
-function sst_narrowing_blocked(PDO $pdo, array $oldRow, int $newTermScope, string $newSexScope, ?array $newStudentIds = null): ?string
+function sst_narrowing_blocked(PDO $pdo, array $oldRow, int $newTermScope, string $newSexScope, ?array $newStudentIds = null, ?int $newMajorId = null): ?string
 {
     $isNarrowing = ((int) $oldRow['term_scope'] === 0 && $newTermScope !== 0)
-        || ($oldRow['sex_scope'] === 'ALL' && $newSexScope !== 'ALL');
+        || ($oldRow['sex_scope'] === 'ALL' && $newSexScope !== 'ALL')
+        || ((int) ($oldRow['major_id'] ?? 0) !== (int) ($newMajorId ?? 0));
 
     if (!$isNarrowing && $oldRow['sex_scope'] === 'MIX' && $newSexScope === 'MIX' && $newStudentIds !== null) {
         $existingStmt = $pdo->prepare('SELECT student_id FROM sst_student_claims WHERE section_subject_teacher_id = ?');
@@ -608,7 +637,8 @@ function term_bucket_availability(PDO $pdo, int $sectionId, array $rowsForBucket
 {
     $coveredBy = [];
     foreach ($rowsForBucket as $row) {
-        foreach (resolve_covered_student_ids($pdo, $sectionId, $row['sex_scope'], (int) $row['id']) as $sid) {
+        $rowMajorId = ($row['major_id'] ?? null) !== null ? (int) $row['major_id'] : null;
+        foreach (resolve_covered_student_ids($pdo, $sectionId, $row['sex_scope'], (int) $row['id'], [], $rowMajorId) as $sid) {
             $coveredBy[$sid] = $row['teacher_name'];
         }
     }
@@ -655,7 +685,7 @@ function term_bucket_availability(PDO $pdo, int $sectionId, array $rowsForBucket
  */
 function claim_availability(PDO $pdo, int $sectionId, int $subjectId, int $schoolYearId): array
 {
-    $stmt = $pdo->prepare('SELECT sst.id, sst.term_scope, sst.sex_scope, u.full_name AS teacher_name
+    $stmt = $pdo->prepare('SELECT sst.id, sst.term_scope, sst.sex_scope, sst.major_id, u.full_name AS teacher_name
         FROM section_subject_teachers sst
         JOIN users u ON u.id = sst.teacher_id
         WHERE sst.section_id = ? AND sst.subject_id = ? AND sst.school_year_id = ? AND sst.is_active = 1');

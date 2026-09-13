@@ -24,17 +24,18 @@ $pdo = db();
 $sexScope = strtoupper(trim((string) ($assignment['sex_scope'] ?? 'ALL')));
 
 if ($sexScope === 'ALL') {
-    $studentsStmt = $pdo->prepare("
-        SELECT *
-        FROM students
-        WHERE section_id = ?
-          AND is_active = 1
-        ORDER BY FIELD(sex, 'M', 'F'), full_name
-    ");
-
-    $studentsStmt->execute([
-        $assignment['section_id'],
-    ]);
+    // A major-scoped assignment (Special Program sections — see db/migrations/0019) only
+    // covers students of that one major; major_id is NULL for every ordinary assignment, so
+    // this is a no-op there.
+    $sql = "SELECT * FROM students WHERE section_id = ? AND is_active = 1";
+    $params = [$assignment['section_id']];
+    if ($assignment['major_id'] !== null) {
+        $sql .= " AND major_id = ?";
+        $params[] = $assignment['major_id'];
+    }
+    $sql .= " ORDER BY FIELD(sex, 'M', 'F'), full_name";
+    $studentsStmt = $pdo->prepare($sql);
+    $studentsStmt->execute($params);
 } elseif ($sexScope === 'MIX') {
     // No section/sex filter needed at all — sst_student_claims already scopes exactly to
     // this assignment.
@@ -388,6 +389,10 @@ $transmutationTable = array_map(
     $pdo->query('SELECT min_initial AS `min`, max_initial AS `max`, transmuted FROM transmutation_table')->fetchAll()
 );
 
+$yearStmt = $pdo->prepare('SELECT year_label FROM school_years WHERE id = ?');
+$yearStmt->execute([$assignment['school_year_id']]);
+$yearLabel = $yearStmt->fetchColumn() ?: '';
+
 render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] . ' · ' . $assignment['subject_name']);
 ?>
 <div class="flex items-center justify-between mb-6">
@@ -395,12 +400,15 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
     <span class="text-sm text-slate-500 dark:text-slate-400">Term <?= $term ?></span>
     <?= status_badge($submission['status'] ?? 'not_started') ?>
   </div>
-  <form method="get" class="flex gap-1">
-    <input type="hidden" name="sst_id" value="<?= $sstId ?>">
-    <?php for ($t = 1; $t <= 3; $t++): ?>
-      <button type="submit" name="term" value="<?= $t ?>" class="px-3 py-1.5 rounded-lg text-sm <?= $t === $term ? 'bg-accent-600 text-white' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700' ?>">Term <?= $t ?></button>
-    <?php endfor; ?>
-  </form>
+  <div class="flex items-center gap-3">
+    <button id="download-pdf" type="button" class="px-3 py-1.5 rounded-lg text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-1.5"><?= icon_svg('download', 'w-4 h-4') ?> Download PDF</button>
+    <form method="get" class="flex gap-1">
+      <input type="hidden" name="sst_id" value="<?= $sstId ?>">
+      <?php for ($t = 1; $t <= 3; $t++): ?>
+        <button type="submit" name="term" value="<?= $t ?>" class="px-3 py-1.5 rounded-lg text-sm <?= $t === $term ? 'bg-accent-600 text-white' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700' ?>">Term <?= $t ?></button>
+      <?php endfor; ?>
+    </form>
+  </div>
 </div>
 
 <?php if ($submission && $submission['status'] === 'returned_for_revision' && $submission['revision_comment']): ?>
@@ -507,7 +515,20 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
   // Chromium seam bug when position:sticky, overflow:auto and border-radius all land on the
   // same element). Splitting "clip to rounded corners" (outer, overflow-hidden, no scrolling
   // of its own) from "scroll" (inner, plain rectangle) avoids that seam entirely. ?>
-  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden mb-4">
+  <?php // Wraps the letterhead (hidden until a PDF is actually being generated) and the grid
+  // together so "Download PDF" below can capture both in one shot. ?>
+  <div id="pdf-capture-root">
+  <div id="pdf-letterhead" class="hidden text-center leading-tight mb-4 text-slate-800">
+    <div>Republic of the Philippines</div>
+    <div>Department of Education</div>
+    <div>Region IV-A CALABARZON</div>
+    <div>Division of Binan City</div>
+    <div class="font-semibold">JACOBO Z. GONZALES MEMORIAL NATIONAL HIGH SCHOOL</div>
+    <div class="font-semibold mt-1">CLASS RECORD — <?= h(strtoupper($assignment['subject_name'])) ?></div>
+    <div><?= h($assignment['grade_level'] . ' - ' . $assignment['section_name']) ?> · Term <?= $term ?> · <?= h($yearLabel) ?></div>
+    <div><?= h(current_user()['full_name']) ?></div>
+  </div>
+  <div id="pdf-clip-wrap" class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden mb-4">
   <div id="grid-scroll-bottom" class="overflow-auto max-h-[70vh]">
     <table class="text-sm min-w-full">
       <?php
@@ -621,6 +642,69 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
     </table>
   </div>
   </div>
+  <?php // A plain, input-free mirror of the grid above, shown only while a PDF is being
+  // generated (the live grid is hidden in its place for that moment) — html2canvas doesn't
+  // reliably render values of <input> elements sitting inside position:sticky cells (the live
+  // grid's header row and frozen name column both are), so capturing the interactive grid
+  // directly left item names/highest-scores blank in the exported PDF. Plain text sidesteps
+  // that entirely and reads better on a printed hard copy anyway — reflects the last SAVED
+  // scores, not unsaved in-progress edits. ?>
+  <div id="pdf-print-table" class="hidden bg-white border border-slate-200 rounded-xl shadow-sm mb-4">
+    <table class="text-sm min-w-full">
+      <thead class="text-slate-500 text-xs uppercase">
+        <tr>
+          <th rowspan="2" class="text-left px-4 py-3">Student</th>
+          <?php foreach (['WW', 'PT', 'EX'] as $type): ?>
+            <?php if (!$itemsByType[$type]) continue; ?>
+            <th colspan="<?= count($itemsByType[$type]) ?>" class="text-center px-3 py-2 font-semibold normal-case <?= $componentBandClasses[$type] ?>"><?= $componentLabels[$type] ?></th>
+          <?php endforeach; ?>
+          <?php for ($t = 1; $t < $term; $t++): ?>
+            <th rowspan="2" class="text-center px-3 py-3 whitespace-nowrap">Term <?= $t ?></th>
+          <?php endfor; ?>
+          <th rowspan="2" class="text-center px-3 py-3">Initial Grade</th>
+          <th rowspan="2" class="text-center px-3 py-3">Transmuted Grade</th>
+          <?php if ($term === 3): ?>
+            <th rowspan="2" class="text-center px-3 py-3 whitespace-nowrap text-accent-600">Final Grade</th>
+          <?php endif; ?>
+        </tr>
+        <tr>
+          <?php foreach (['WW', 'PT', 'EX'] as $type): ?>
+            <?php foreach ($itemsByType[$type] as $item): ?>
+              <th class="text-center px-2 py-2 whitespace-nowrap font-semibold normal-case"><?= h($item['item_name']) ?> (<?= h(rtrim(rtrim((string) $item['highest_possible_score'], '0'), '.')) ?>)</th>
+            <?php endforeach; ?>
+          <?php endforeach; ?>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        <?php $lastSex = null; foreach ($students as $student): ?>
+        <?php if ($student['sex'] !== $lastSex): $lastSex = $student['sex']; ?>
+        <tr><td colspan="99" class="px-4 py-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide bg-slate-50"><?= $student['sex'] === 'M' ? 'Male' : 'Female' ?></td></tr>
+        <?php endif; ?>
+        <?php $gradeStmt->execute([$student['id'], $assignment['subject_id'], $term]); $grade = $gradeStmt->fetch(); ?>
+        <tr>
+          <td class="px-4 py-2 font-medium whitespace-nowrap"><?= h($student['full_name']) ?></td>
+          <?php foreach (['WW', 'PT', 'EX'] as $type): ?>
+            <?php foreach ($itemsByType[$type] as $item): $rawScore = $scoreLookup[$item['id']][$student['id']] ?? null; ?>
+              <td class="px-3 py-2 text-center"><?= $rawScore !== null ? (int) round((float) $rawScore) : '—' ?></td>
+            <?php endforeach; ?>
+          <?php endforeach; ?>
+          <?php for ($t = 1; $t < $term; $t++): $pg = $priorGrades[$t][$student['id']] ?? null; ?>
+            <td class="px-3 py-2 text-center <?= $pg !== null ? grade_display_class((float) $pg) : 'text-slate-500' ?>"><?= $pg !== null ? h($pg) : '—' ?></td>
+          <?php endfor; ?>
+          <td class="px-3 py-2 text-center font-medium"><?= $grade && $grade['initial_grade'] !== null ? h($grade['initial_grade']) : '—' ?></td>
+          <td class="px-3 py-2 text-center font-semibold <?= $grade && $grade['transmuted_grade'] !== null ? (grade_display_class((float) $grade['transmuted_grade']) ?: 'text-accent-700') : 'text-accent-700' ?>"><?= $grade && $grade['transmuted_grade'] !== null ? h($grade['transmuted_grade']) : '—' ?></td>
+          <?php if ($term === 3): $fg = $finalGrades[$student['id']] ?? null; ?>
+            <td class="px-3 py-2 text-center font-semibold <?= $fg !== null ? (grade_display_class((float) $fg) ?: 'text-accent-700') : 'text-accent-700' ?>"><?= $fg !== null ? h($fg) : '—' ?></td>
+          <?php endif; ?>
+        </tr>
+        <?php endforeach; ?>
+        <?php if (!$students): ?>
+        <tr><td colspan="99" class="px-4 py-6 text-center text-slate-400">No students in this section yet.</td></tr>
+        <?php endif; ?>
+      </tbody>
+    </table>
+  </div>
+  </div>
   <?php if ($editable && $failingStudents): ?>
   <div class="bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-800 rounded-xl shadow-sm p-5 mb-4">
     <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1">Reasons for failing grades</h3>
@@ -681,4 +765,80 @@ window.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 <?php endif; ?>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script>
+(function () {
+  var btn = document.getElementById('download-pdf');
+  if (!btn) return;
+  var fileName = <?= json_encode(strtolower(preg_replace('/[^a-z0-9]+/i', '-', $assignment['grade_level'] . '-' . $assignment['section_name'] . '-' . $assignment['subject_name'])) . '-term' . $term . '-class-record.pdf') ?>;
+
+  btn.addEventListener('click', async function () {
+    var originalLabel = btn.innerHTML;
+    btn.disabled = true;
+    btn.textContent = 'Generating PDF…';
+
+    var letterhead = document.getElementById('pdf-letterhead');
+    var clipWrap = document.getElementById('pdf-clip-wrap');
+    var printTable = document.getElementById('pdf-print-table');
+    var root = document.getElementById('pdf-capture-root');
+    var wasHidden = letterhead.classList.contains('hidden');
+
+    try {
+      // Swap the live, interactive grid for the plain print-only mirror table for the
+      // capture — see the comment above #pdf-print-table for why (html2canvas doesn't
+      // reliably render <input> values inside position:sticky cells) — and reveal the
+      // normally-hidden letterhead.
+      letterhead.classList.remove('hidden');
+      clipWrap.classList.add('hidden');
+      printTable.classList.remove('hidden');
+
+      var SCALE = 2;
+      // Row-boundary-aware page breaks — measured from the live DOM before capture — so a
+      // page break never lands in the middle of a student's row on the printed document.
+      var rowOffsetsCss = Array.prototype.map.call(printTable.querySelectorAll('tbody tr'), function (tr) {
+        return tr.getBoundingClientRect().top - root.getBoundingClientRect().top;
+      });
+
+      var canvas = await html2canvas(root, { scale: SCALE, backgroundColor: '#ffffff' });
+
+      var pageWidthMm = 277, pageHeightMm = 190; // A4 landscape minus 10mm margins
+      var pxPerMm = canvas.width / pageWidthMm;
+      var pageHeightPx = pageHeightMm * pxPerMm;
+
+      var breaks = [0];
+      var budgetStart = 0;
+      rowOffsetsCss.forEach(function (cssTop) {
+        var px = cssTop * SCALE;
+        if (px - budgetStart > pageHeightPx) {
+          breaks.push(px);
+          budgetStart = px;
+        }
+      });
+      breaks.push(canvas.height);
+
+      var pdf = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' });
+      for (var i = 0; i < breaks.length - 1; i++) {
+        var sliceTop = breaks[i], sliceH = breaks[i + 1] - breaks[i];
+        if (sliceH <= 0) continue;
+        var pageCanvas = document.createElement('canvas');
+        pageCanvas.width = canvas.width;
+        pageCanvas.height = sliceH;
+        pageCanvas.getContext('2d').drawImage(canvas, 0, sliceTop, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+        if (i > 0) pdf.addPage();
+        pdf.addImage(pageCanvas.toDataURL('image/jpeg', 0.95), 'JPEG', 10, 10, pageWidthMm, sliceH / pxPerMm);
+      }
+      pdf.save(fileName);
+    } catch (err) {
+      alert('Could not generate the PDF: ' + err.message);
+    } finally {
+      clipWrap.classList.remove('hidden');
+      printTable.classList.add('hidden');
+      if (wasHidden) letterhead.classList.add('hidden');
+      btn.disabled = false;
+      btn.innerHTML = originalLabel;
+    }
+  });
+})();
+</script>
 <?php render_footer(); ?>

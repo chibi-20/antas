@@ -599,6 +599,49 @@ function initDismissibleTip() {
   }
 }
 
+/**
+ * Shows/hides a field (e.g. the Major picker on admin/students.php and admin/assignments.php)
+ * based on whether the currently-selected option of a paired <select> is a Special Program
+ * section — each relevant <option> carries data-special="1"/"0", and the <select> itself
+ * carries data-special-target="<id of the field wrapper to show/hide>". Runs once on load
+ * (so an edit form pre-selecting a special section starts with the field visible) and again
+ * on every change.
+ */
+function initSpecialSectionToggle() {
+  document.querySelectorAll('[data-special-target]').forEach(function (select) {
+    var target = document.getElementById(select.getAttribute('data-special-target'));
+    if (!target) return;
+    function sync() {
+      var opt = select.options[select.selectedIndex];
+      target.hidden = !opt || opt.getAttribute('data-special') !== '1';
+    }
+    select.addEventListener('change', sync);
+    sync();
+  });
+}
+
+/**
+ * admin/assignments.php: picking a Major forces "Applies To" back to All Students and locks
+ * it, since a major-scoped assignment and a sex-split (M/F/MIX) one are mutually exclusive
+ * (see db/migrations/0019's chk_sst_major_sex_scope). $majorSelect carries
+ * data-major-select="#idOfSexScopeSelect" pointing at the select to lock. A disabled select
+ * simply isn't submitted, so the server naturally sees no sex_scope and falls back to its own
+ * 'ALL' default — no hidden fallback input needed.
+ */
+function initMajorSexScopeLock() {
+  document.querySelectorAll('[data-major-select]').forEach(function (majorSelect) {
+    var sexScopeSelect = document.querySelector(majorSelect.getAttribute('data-major-select'));
+    if (!sexScopeSelect) return;
+    function sync() {
+      var hasMajor = majorSelect.value !== '';
+      if (hasMajor) sexScopeSelect.value = 'ALL';
+      sexScopeSelect.disabled = hasMajor;
+    }
+    majorSelect.addEventListener('change', sync);
+    sync();
+  });
+}
+
 function initFailReasonToggle() {
   document.querySelectorAll('.js-fail-reason-select').forEach(function (select) {
     var studentId = select.getAttribute('data-student-id');
