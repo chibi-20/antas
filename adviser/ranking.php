@@ -87,17 +87,27 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
   <button type="submit" name="term" value="overall" class="px-3 py-1.5 rounded-lg text-sm <?= $isOverall ? 'bg-accent-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50' ?>">Overall</button>
 </form>
 
-<div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden max-w-2xl">
+<div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden max-w-3xl">
   <table class="w-full text-sm">
     <thead class="bg-slate-50 text-slate-500 text-xs uppercase">
-      <tr><th class="text-left px-4 py-3">Rank</th><th class="text-left px-4 py-3">Student</th><th class="text-left px-4 py-3">General Average</th><th class="text-left px-4 py-3">Honor</th></tr>
+      <tr><th class="text-left px-4 py-3">Rank</th><th class="text-left px-4 py-3">Student</th><th class="text-left px-4 py-3">General Average</th><th class="text-left px-4 py-3">Whole Grade</th><th class="text-left px-4 py-3">Honor</th></tr>
     </thead>
     <tbody class="divide-y divide-slate-100">
-      <?php foreach ($ranking as $r): $honor = honor_classification($r['average'] !== null ? (float) $r['average'] : null); ?>
+      <?php foreach ($ranking as $r):
+          $wholeGrade = grade_whole($r['average']);
+          // Academic Excellence eligibility is checked against the rounded whole-number
+          // grade, not the raw 3-decimal average — the 3-decimal figure exists purely to
+          // break ties fairly for ranking (the LGU voucher), but a grade like 89.667 is
+          // meant to round to 90 and qualify, same as it always has on Consolidated
+          // Grades/Card Slips; checking the un-rounded value would quietly deny the award to
+          // a student who actually made the cutoff.
+          $honor = honor_classification($wholeGrade !== null ? (float) $wholeGrade : null);
+      ?>
       <tr>
         <td class="px-4 py-3 font-semibold <?= (int) $r['rank_in_section'] <= 3 ? 'text-accent-700' : 'text-slate-600' ?>">#<?= (int) $r['rank_in_section'] ?></td>
         <td class="px-4 py-3 font-medium"><?= h($r['full_name']) ?></td>
         <td class="px-4 py-3 <?= $r['average'] !== null ? grade_display_class((float) $r['average']) : '' ?>"><?= h($r['average']) ?></td>
+        <td class="px-4 py-3 font-medium <?= $wholeGrade !== null ? grade_display_class((float) $wholeGrade) : '' ?>"><?= $wholeGrade !== null ? h($wholeGrade) : '—' ?></td>
         <td class="px-4 py-3">
           <?php if ($honor): ?>
             <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700"><?= icon_svg('star', 'w-3 h-3') ?> <?= h($honor) ?></span>
@@ -108,7 +118,7 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
       </tr>
       <?php endforeach; ?>
       <?php if (!$ranking): ?>
-      <tr><td colspan="4" class="px-4 py-6 text-center text-slate-400"><?= $isOverall
+      <tr><td colspan="5" class="px-4 py-6 text-center text-slate-400"><?= $isOverall
           ? 'Overall ranking will appear once at least 2 of the 3 terms have a General Average for a student.'
           : 'No published subjects yet for this term — ranking will appear once at least one subject is published.' ?></td></tr>
       <?php endif; ?>
