@@ -531,11 +531,12 @@ function resolve_covered_student_ids(PDO $pdo, int $sectionId, string $sexScope,
  */
 function sst_scope_conflict(PDO $pdo, int $sectionId, int $subjectId, int $schoolYearId, int $termScope, string $sexScope, ?int $excludeId = null, array $explicitStudentIds = [], ?int $majorId = null): ?string
 {
-    $sql = 'SELECT id, term_scope, sex_scope, major_id FROM section_subject_teachers
-        WHERE section_id = ? AND subject_id = ? AND school_year_id = ? AND is_active = 1';
+    $sql = 'SELECT sst.id, sst.term_scope, sst.sex_scope, sst.major_id, u.full_name AS teacher_name
+        FROM section_subject_teachers sst JOIN users u ON u.id = sst.teacher_id
+        WHERE sst.section_id = ? AND sst.subject_id = ? AND sst.school_year_id = ? AND sst.is_active = 1';
     $params = [$sectionId, $subjectId, $schoolYearId];
     if ($excludeId !== null) {
-        $sql .= ' AND id != ?';
+        $sql .= ' AND sst.id != ?';
         $params[] = $excludeId;
     }
     $stmt = $pdo->prepare($sql);
@@ -567,7 +568,18 @@ function sst_scope_conflict(PDO $pdo, int $sectionId, int $subjectId, int $schoo
                     }
                     return 'This term already has a ' . ($sexScope === 'M' ? 'Male-only' : 'Female-only') . ' assignment for this section/subject.';
                 }
-                return 'This term already has an assignment covering one or more of the selected students — pick a different set or deactivate the conflicting assignment first.';
+                // Names the actual conflicting assignment whenever a major is on either side —
+                // the single most common real case is a subject that already has one generic
+                // (no-major, all-students) assignment from before Special Program majors
+                // existed, now blocking the first major-specific one; a plain "pick a different
+                // set" message left the admin no way to find what to deactivate.
+                if ($majorId !== null && $rowMajorId === null && $row['sex_scope'] === 'ALL') {
+                    return "This subject already has a generic assignment covering every student in this section, taught by {$row['teacher_name']} — deactivate that one first, then add one major-scoped assignment per major.";
+                }
+                if ($majorId !== null && $rowMajorId !== null) {
+                    return "One or more of these students already has a major-scoped assignment for this subject, taught by {$row['teacher_name']} — pick a different major or deactivate that assignment first.";
+                }
+                return "This term already has an assignment covering one or more of the selected students, taught by {$row['teacher_name']} — pick a different set or deactivate that assignment first.";
             }
         }
     }
