@@ -77,8 +77,15 @@ html.dark .js-just-pasted {
   margin: 0 auto 8mm auto;
 }
 
-.slip-remarks { border-top: 1px dashed #cbd5e1; margin-top: 6px; padding-top: 4px; font-size: 10px; }
-.slip-remarks-label { font-size: 8px; text-transform: uppercase; letter-spacing: 0.03em; color: #94a3b8; margin-bottom: 2px; }
+.slip-remarks { border-top: 1px dashed #cbd5e1; margin-top: 4px; padding-top: 3px; font-size: 10px; }
+.slip-remarks-label { font-size: 8px; text-transform: uppercase; letter-spacing: 0.03em; color: #94a3b8; margin-bottom: 1px; }
+.slip-remarks-row { line-height: 1.15; }
+.slip-remarks-term { font-weight: 600; margin-right: 2px; }
+
+/* Parent's/Guardian's Signature — one blank line for physical signing (no data behind it,
+   unlike .slip-remarks), for the term being printed. */
+.slip-signature-row { display: flex; align-items: flex-end; gap: 6px; margin-top: 3px; }
+.slip-signature-line { flex: 1; border-bottom: 1px solid #94a3b8; height: 1px; }
 
 /* The 2-per-sheet slip is roughly double the width of the 4-per-sheet one but was inheriting
    the exact same (small, tuned-for-a-quarter-page) font sizes from .slip and friends — scaled
@@ -92,12 +99,13 @@ html.dark .js-just-pasted {
 .print-page-2up .slip-sub { font-size: 11.5px; }
 .print-page-2up .descriptor { font-size: 10px; }
 .print-page-2up .slip-legend { font-size: 8px; margin-top: 1px; }
-.print-page-2up .slip-remarks { font-size: 11.5px; margin-top: 3px; padding-top: 2px; }
+.print-page-2up .slip-remarks { font-size: 11px; margin-top: 2px; padding-top: 2px; }
 .print-page-2up .slip-remarks-label { font-size: 9px; }
-.print-page-2up .slip-table th, .print-page-2up .slip-table td { padding: 0px 4px; line-height: 1.15; }
-.print-page-2up .slip-header { margin-bottom: 3px; padding-bottom: 2px; }
-.print-page-2up .slip-student { margin-bottom: 3px; line-height: 1.25; }
-.print-page-2up .slip-footer { margin-top: 3px; padding-top: 2px; }
+.print-page-2up .slip-signature-row { font-size: 11.5px; margin-top: 2px; }
+.print-page-2up .slip-table th, .print-page-2up .slip-table td { padding: 0px 4px; line-height: 1.05; }
+.print-page-2up .slip-header { margin-bottom: 2px; padding-bottom: 1px; }
+.print-page-2up .slip-student { margin-bottom: 2px; line-height: 1.15; }
+.print-page-2up .slip-footer { margin-top: 2px; padding-top: 1px; }
 
 .slip-header { display: flex; align-items: center; gap: 6px; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; margin-bottom: 6px; }
 .slip-logo { width: 34px; height: 34px; object-fit: contain; flex-shrink: 0; }

@@ -16,26 +16,32 @@ $pdo = db();
 $data = get_consolidated_data($sectionId, (int) $section['school_year_id'], $term);
 $year = active_school_year();
 
-// Only fetched in 2up mode — the 4up layout never shows remarks at all.
+// Only fetched in 2up mode — the 4up layout never shows remarks at all. Every term up through
+// the one being viewed, so switching to Term 2/3 doesn't hide Term 1's remark — same "show
+// prior terms too" pattern the grades table already uses. Kept to one signature line (for the
+// term actually being printed) rather than one per term too, both to fit the fixed slip height
+// and because re-signing an already-handed-out term's slip isn't a real workflow.
 $remarksByStudent = [];
 if ($mode === '2up' && $data['students']) {
     $placeholders = implode(',', array_fill(0, count($data['students']), '?'));
-    $stmt = $pdo->prepare("SELECT student_id, remark_text FROM student_term_remarks
-        WHERE term = ? AND school_year_id = ? AND student_id IN ($placeholders)");
-    $stmt->execute(array_merge([$term, $section['school_year_id']], array_column($data['students'], 'id')));
+    $termsPlaceholders = implode(',', array_fill(0, $term, '?'));
+    $stmt = $pdo->prepare("SELECT student_id, term, remark_text FROM student_term_remarks
+        WHERE term IN ($termsPlaceholders) AND school_year_id = ? AND student_id IN ($placeholders)");
+    $stmt->execute(array_merge(range(1, $term), [$section['school_year_id']], array_column($data['students'], 'id')));
     foreach ($stmt->fetchAll() as $row) {
-        $remarksByStudent[(int) $row['student_id']] = $row['remark_text'];
+        $remarksByStudent[(int) $row['student_id']][(int) $row['term']] = $row['remark_text'];
     }
 }
 
 /**
  * Renders one slip's shared inner markup (header, student info, grades table, general-average
  * footer, descriptor legend) — used by both the 4-per-sheet and 2-per-sheet loops below so they
- * can never quietly drift apart into two different-looking slips. $remarkText null means "don't
- * render a remarks section at all" (4up mode); a string (possibly empty) means "render it,
- * showing that text or a — placeholder" (2up mode).
+ * can never quietly drift apart into two different-looking slips. $remarksByTerm null means
+ * "don't render a remarks/signature section at all" (4up mode); an array (possibly with gaps,
+ * term => text) means "render one labeled row per term through the one being viewed, plus a
+ * single Parent/Guardian signature line for the term actually being printed" (2up mode).
  */
-function render_card_slip_inner(array $student, array $section, array $data, int $term, string $yearLabel, ?string $remarkText): void
+function render_card_slip_inner(array $student, array $section, array $data, int $term, string $yearLabel, ?array $remarksByTerm): void
 {
     ?>
     <div class="slip-header">
@@ -98,10 +104,15 @@ function render_card_slip_inner(array $student, array $section, array $data, int
       <div>General Average: <strong class="<?= $avg !== null ? grade_display_class((float) $avg) : '' ?>"><?= $avg !== null ? h($avg) : '—' ?></strong><?php if ($avg !== null): ?><span class="descriptor">(<?= h(grade_descriptor_letter((float) $avg)) ?>)</span><?php endif; ?></div>
     </div>
     <div class="slip-legend"><?= h(GRADE_DESCRIPTOR_LEGEND) ?></div>
-    <?php if ($remarkText !== null): ?>
+    <?php if ($remarksByTerm !== null): ?>
     <div class="slip-remarks">
       <div class="slip-remarks-label">Teacher's Comments / Remarks</div>
-      <div><?= $remarkText !== '' ? h($remarkText) : '—' ?></div>
+      <?php for ($t = 1; $t <= $term; $t++): $rt = $remarksByTerm[$t] ?? ''; ?>
+      <div class="slip-remarks-row"><span class="slip-remarks-term">T<?= $t ?>:</span> <?= $rt !== '' ? h($rt) : '—' ?></div>
+      <?php endfor; ?>
+    </div>
+    <div class="slip-signature-row">
+      <span class="slip-remarks-term">Parent's/Guardian's Signature:</span> <span class="slip-signature-line"></span>
     </div>
     <?php endif; ?>
     <?php
@@ -154,7 +165,7 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
 <div class="print-page-2up">
   <?php foreach ($page as $student): ?>
   <div class="slip">
-    <?php render_card_slip_inner($student, $section, $data, $term, $year['year_label'] ?? '', $remarksByStudent[$student['id']] ?? ''); ?>
+    <?php render_card_slip_inner($student, $section, $data, $term, $year['year_label'] ?? '', $remarksByStudent[$student['id']] ?? []); ?>
   </div>
   <?php endforeach; ?>
   <?php for ($i = count($page); $i < 2; $i++): ?>
