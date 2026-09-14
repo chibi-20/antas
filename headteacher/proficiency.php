@@ -48,28 +48,33 @@ if ($term < 1 || $term > 3) {
     $term = 1;
 }
 
-// 7-band Proficiency Level, per the school's own criteria — transmuted grades are always
-// whole numbers (see transmutation_table), so integer-inclusive boundaries are exact.
+// 7-band Proficiency Level, matching the school's own SF report table exactly — Outstanding
+// is one band (90-100) but broken into three finer-grained count columns (98-100/95-97/90-94,
+// same as the source table) rather than a single merged 90-100 row, so each keeps its own
+// 'key' distinct from its shared 'label' (three PHP array keys can't all be "Outstanding").
+// Transmuted grades are always whole numbers (see transmutation_table), so integer-inclusive
+// boundaries are exact.
 const PL_BANDS = [
-    ['min' => 98, 'label' => 'Outstanding+', 'range' => '98-100'],
-    ['min' => 95, 'label' => 'Outstanding', 'range' => '95-97'],
-    ['min' => 90, 'label' => 'Very Satisfactory', 'range' => '90-94'],
-    ['min' => 85, 'label' => 'Satisfactory', 'range' => '85-89'],
-    ['min' => 80, 'label' => 'Fairly Satisfactory', 'range' => '80-84'],
-    ['min' => 75, 'label' => 'Did Not Meet Expectations', 'range' => '75-79'],
-    ['min' => -1, 'label' => 'Beginning', 'range' => '74 and below'],
+    ['min' => 98, 'key' => 'outstanding_98', 'label' => 'Outstanding', 'range' => '98-100'],
+    ['min' => 95, 'key' => 'outstanding_95', 'label' => 'Outstanding', 'range' => '95-97'],
+    ['min' => 90, 'key' => 'outstanding_90', 'label' => 'Outstanding', 'range' => '90-94'],
+    ['min' => 85, 'key' => 'very_satisfactory', 'label' => 'Very Satisfactory', 'range' => '85-89'],
+    ['min' => 80, 'key' => 'satisfactory', 'label' => 'Satisfactory', 'range' => '80-84'],
+    ['min' => 75, 'key' => 'fairly_satisfactory', 'label' => 'Fairly Satisfactory', 'range' => '75-79'],
+    ['min' => -1, 'key' => 'did_not_meet', 'label' => 'Did Not Meet Expectations', 'range' => 'Below 75'],
 ];
 function pl_band(float $grade): string
 {
     foreach (PL_BANDS as $band) {
         if ($grade >= $band['min']) {
-            return $band['label'];
+            return $band['key'];
         }
     }
-    return 'Beginning';
+    return 'did_not_meet';
 }
-$bandLabels = array_column(PL_BANDS, 'label');
-$bandRanges = array_combine($bandLabels, array_column(PL_BANDS, 'range'));
+$bandKeys = array_column(PL_BANDS, 'key');
+$bandLabels = array_combine($bandKeys, array_column(PL_BANDS, 'label'));
+$bandRanges = array_combine($bandKeys, array_column(PL_BANDS, 'range'));
 
 $perSection = [];
 $perGradeLevel = [];
@@ -154,12 +159,12 @@ if ($subjectId && in_array($subjectId, $supervisedSubjectPickerIds, true)) {
         $sex = $row['sex'];
 
         if (!isset($perSection[$row['section_id']])) {
-            $perSection[$row['section_id']] = ['name' => $row['grade_level'] . ' - ' . $row['section_name'], 'grade_level_id' => $row['grade_level_id'], 'bands' => array_fill_keys($bandLabels, ['M' => 0, 'F' => 0])];
+            $perSection[$row['section_id']] = ['name' => $row['grade_level'] . ' - ' . $row['section_name'], 'grade_level_id' => $row['grade_level_id'], 'bands' => array_fill_keys($bandKeys, ['M' => 0, 'F' => 0])];
         }
         $perSection[$row['section_id']]['bands'][$band][$sex]++;
 
         if (!isset($perGradeLevel[$row['grade_level_id']])) {
-            $perGradeLevel[$row['grade_level_id']] = ['name' => $row['grade_level'], 'sort_order' => $row['sort_order'], 'bands' => array_fill_keys($bandLabels, ['M' => 0, 'F' => 0])];
+            $perGradeLevel[$row['grade_level_id']] = ['name' => $row['grade_level'], 'sort_order' => $row['sort_order'], 'bands' => array_fill_keys($bandKeys, ['M' => 0, 'F' => 0])];
         }
         $perGradeLevel[$row['grade_level_id']]['bands'][$band]['M'] += $sex === 'M' ? 1 : 0;
         $perGradeLevel[$row['grade_level_id']]['bands'][$band]['F'] += $sex === 'F' ? 1 : 0;
@@ -198,7 +203,7 @@ echo ht_tab_nav('proficiency');
         <tbody class="divide-y divide-slate-100">
           <?php foreach ($gl['bands'] as $band => $counts): ?>
           <tr>
-            <td class="py-2"><?= h($band) ?></td>
+            <td class="py-2"><?= h($bandLabels[$band]) ?></td>
             <td class="py-2 text-slate-500"><?= h($bandRanges[$band]) ?></td>
             <td class="py-2 text-right"><?= $counts['M'] ?></td>
             <td class="py-2 text-right"><?= $counts['F'] ?></td>
@@ -226,7 +231,7 @@ echo ht_tab_nav('proficiency');
         <?php foreach ($sec['bands'] as $band => $counts): ?>
           <?php if ($counts['M'] + $counts['F'] === 0) continue; ?>
         <tr>
-          <td class="py-1.5"><?= h($band) ?></td>
+          <td class="py-1.5"><?= h($bandLabels[$band]) ?></td>
           <td class="py-1.5 text-slate-500"><?= h($bandRanges[$band]) ?></td>
           <td class="py-1.5 text-right"><?= $counts['M'] ?></td>
           <td class="py-1.5 text-right"><?= $counts['F'] ?></td>
@@ -241,7 +246,7 @@ echo ht_tab_nav('proficiency');
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script>
-<?php $chartLabels = array_map(fn($band) => [$band, '(' . $bandRanges[$band] . ')'], $bandLabels); ?>
+<?php $chartLabels = array_map(fn($band) => [$bandLabels[$band], '(' . $bandRanges[$band] . ')'], $bandKeys); ?>
 <?php foreach ($perGradeLevel as $glId => $gl): ?>
 new Chart(document.getElementById('pl-chart-<?= (int) $glId ?>'), {
   type: 'bar',
