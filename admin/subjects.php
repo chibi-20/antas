@@ -47,8 +47,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } elseif ($action === 'toggle_active') {
         $id = (int) $_POST['id'];
+        $wasActiveStmt = $pdo->prepare('SELECT is_active FROM subjects WHERE id = ?');
+        $wasActiveStmt->execute([$id]);
+        $wasActive = (bool) $wasActiveStmt->fetchColumn();
         $pdo->prepare('UPDATE subjects SET is_active = NOT is_active WHERE id = ?')->execute([$id]);
+        if ($wasActive) {
+            // Deactivating a subject only ever changed the catalog entry — any assignment
+            // already made against it (section_subject_teachers) stayed active regardless, so
+            // it kept showing up everywhere (Class Record, Consolidated Grades, Card Slips) as
+            // if nothing had changed. Cascading here is what actually makes "deactivate this
+            // subject" mean what it looks like it means. Same retired_dedup_id-on-deactivate
+            // convention admin/assignments.php's own toggle_active already uses, so a later
+            // reactivation of the subject doesn't collide with the freed-up slot.
+            $pdo->prepare("UPDATE section_subject_teachers SET is_active = 0, retired_dedup_id = id WHERE subject_id = ? AND is_active = 1")->execute([$id]);
+        }
         flash_set('success', 'Status updated.');
+    } elseif ($action === 'delete') {
+        $id = (int) $_POST['id'];
+        try {
+            $pdo->prepare('DELETE FROM subjects WHERE id = ?')->execute([$id]);
+            flash_set('success', 'Subject deleted.');
+        } catch (PDOException $e) {
+            flash_set('error', 'Could not delete — this subject has already been used somewhere (an assignment, a grade, a head teacher supervision, or as a MAPEH-style parent/component). Deactivate it instead.');
+        }
     }
     redirect('/admin/subjects.php');
 }
@@ -139,6 +160,12 @@ render_header('Subjects');
             <input type="hidden" name="action" value="toggle_active">
             <input type="hidden" name="id" value="<?= (int) $s['id'] ?>">
             <button type="submit" class="text-slate-500 hover:underline"><?= $s['is_active'] ? 'Deactivate' : 'Activate' ?></button>
+          </form>
+          <form method="post" class="inline" data-confirm="Delete this subject permanently? Only works if it's never been assigned, graded, or supervised — otherwise deactivate it instead.">
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="delete">
+            <input type="hidden" name="id" value="<?= (int) $s['id'] ?>">
+            <button type="submit" class="text-rose-500 hover:underline">Delete</button>
           </form>
         </td>
       </tr>
