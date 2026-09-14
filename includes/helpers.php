@@ -6,6 +6,44 @@ function h($value): string
     return htmlspecialchars((string) $value);
 }
 
+/**
+ * Records one notification-bell event for one recipient — the write side of the
+ * notifications table (includes/layout.php's get_notifications()/notification_count() are the
+ * read side). Called from the exact action handlers that cause each event: publish/return
+ * (headteacher/review.php), submit for review (teacher/class_record.php), and request an edit
+ * (teacher/request_edit.php). $detail and $href are precomputed by the caller (not
+ * recomputed via joins at read time) — a snapshot, same philosophy as grade_edit_history and
+ * student_term_remarks, so a notification still reads correctly even if the underlying
+ * assignment is later reassigned or deactivated.
+ */
+function notify(int $userId, string $type, int $sstId, int $sectionId, int $term, string $detail, string $href): void
+{
+    db()->prepare('INSERT INTO notifications (user_id, type, section_subject_teacher_id, section_id, term, detail, href) VALUES (?, ?, ?, ?, ?, ?, ?)')
+        ->execute([$userId, $type, $sstId, $sectionId, $term, $detail, $href]);
+}
+
+/** Clears this user's unread badge — called from mark_notifications_read.php when the bell opens. */
+function mark_notifications_read(int $userId): void
+{
+    db()->prepare('UPDATE notifications SET read_at = NOW() WHERE user_id = ? AND read_at IS NULL')->execute([$userId]);
+}
+
+/**
+ * Every active Head Teacher supervising a subject this school year — used to fan out a
+ * "submitted for review" or "edit request" notification to whoever actually needs to act on
+ * it (ordinarily one person, but head_teacher_assignments doesn't forbid more than one).
+ *
+ * @return array<int, array{id: int, full_name: string}>
+ */
+function head_teachers_for_subject(int $subjectId, int $schoolYearId): array
+{
+    $stmt = db()->prepare('SELECT u.id, u.full_name FROM head_teacher_assignments hta
+        JOIN users u ON u.id = hta.head_teacher_id
+        WHERE hta.subject_id = ? AND hta.school_year_id = ? AND hta.is_active = 1');
+    $stmt->execute([$subjectId, $schoolYearId]);
+    return $stmt->fetchAll();
+}
+
 /** @param array<int, array<string, mixed>> $rows */
 function select_options(array $rows, string $valueKey, string $labelKey, $selected = null): string
 {

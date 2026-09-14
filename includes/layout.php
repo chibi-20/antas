@@ -170,42 +170,93 @@ function nav_items(array $user): array
 }
 
 /**
- * How many things need this user's attention right now, shown as the top-bar notification
- * badge — real counts only, never a placeholder number. Admin: sections/subjects still
- * awaiting review school-wide. Anyone else: their own submissions returned for revision
- * (something THEY need to act on) plus, if they supervise anything, submissions awaiting
- * THEIR review.
+ * The read side of the `notifications` table for the top-bar bell (includes/helpers.php's
+ * notify() is the write side, called from the exact action that causes each event: publish or
+ * return in headteacher/review.php, submit for review in teacher/class_record.php, request an
+ * edit in teacher/request_edit.php) — a teacher sees their own "Published"/"Returned for
+ * revision" items plus, if they supervise anything, "Submitted for review"/"Edit request"
+ * items for whatever they supervise, all in one list, newest first. Each row's 'read' flag
+ * drives the dropdown's unread dot; notification_count() below is just how many are unread.
+ *
+ * Admin is the one exception: no events are ever written for admin (fanning every submission
+ * out to every admin account would be noisy and wasn't asked for) — admin keeps the same live
+ * school-wide "still awaiting review" backlog this bell always showed, which has no "read"
+ * state since it's an ongoing count, not a personal alert.
+ *
+ * @return array<int, array{id: ?int, type: string, label: string, detail: string, time: ?string, href: string, read: bool}>
  */
-function notification_count(array $user): int
+function get_notifications(array $user, int $limit = 20): array
 {
     $pdo = db();
     $year = active_school_year();
     if (!$year) {
-        return 0;
+        return [];
     }
 
     if ($user['role'] === 'admin') {
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM submission_status ss
+        $stmt = $pdo->prepare("SELECT sst.id AS sst_id, ss.term, ss.submitted_at, sub.subject_name, gl.name AS grade_level, sec.section_name, u.full_name AS teacher_name
+            FROM submission_status ss
             JOIN section_subject_teachers sst ON sst.id = ss.section_subject_teacher_id
-            WHERE ss.status = 'submitted_for_review' AND sst.school_year_id = ?");
+            JOIN subjects sub ON sub.id = sst.subject_id
+            JOIN sections sec ON sec.id = sst.section_id
+            JOIN grade_levels gl ON gl.id = sec.grade_level_id
+            JOIN users u ON u.id = sst.teacher_id
+            WHERE ss.status = 'submitted_for_review' AND sst.school_year_id = ?
+            ORDER BY ss.submitted_at DESC LIMIT $limit");
         $stmt->execute([$year['id']]);
-        return (int) $stmt->fetchColumn();
+        $notifications = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $notifications[] = [
+                'id' => null,
+                'type' => 'submitted_for_review',
+                'label' => 'Awaiting review',
+                'detail' => $row['teacher_name'] . ' · ' . $row['subject_name'] . ' · ' . $row['grade_level'] . ' - ' . $row['section_name'] . ' · Term ' . $row['term'],
+                'time' => $row['submitted_at'],
+                'href' => url('/headteacher/review.php?sst_id=' . $row['sst_id'] . '&term=' . $row['term']),
+                'read' => true,
+            ];
+        }
+        return $notifications;
     }
 
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM submission_status ss
-        JOIN section_subject_teachers sst ON sst.id = ss.section_subject_teacher_id
-        WHERE ss.status = 'returned_for_revision' AND sst.teacher_id = ? AND sst.school_year_id = ?");
-    $stmt->execute([$user['id'], $year['id']]);
-    $count = (int) $stmt->fetchColumn();
+    $stmt = $pdo->prepare("SELECT id, type, detail, href, created_at, read_at FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT $limit");
+    $stmt->execute([$user['id']]);
+    $labels = [
+        'published' => 'Published',
+        'returned_for_revision' => 'Returned for revision',
+        'submitted_for_review' => 'Submitted for review',
+        'edit_request' => 'Edit request',
+        'section_grade_published' => 'Grade published',
+    ];
+    $notifications = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $notifications[] = [
+            'id' => (int) $row['id'],
+            'type' => $row['type'],
+            'label' => $labels[$row['type']] ?? $row['type'],
+            'detail' => $row['detail'],
+            'time' => $row['created_at'],
+            'href' => $row['href'],
+            'read' => $row['read_at'] !== null,
+        ];
+    }
+    return $notifications;
+}
 
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM submission_status ss
-        JOIN section_subject_teachers sst ON sst.id = ss.section_subject_teacher_id
-        JOIN head_teacher_assignments hta ON hta.subject_id = sst.subject_id AND hta.school_year_id = sst.school_year_id
-        WHERE ss.status = 'submitted_for_review' AND hta.head_teacher_id = ? AND hta.is_active = 1 AND sst.school_year_id = ?");
-    $stmt->execute([$user['id'], $year['id']]);
-    $count += (int) $stmt->fetchColumn();
-
-    return $count;
+/**
+ * Unread count for the top-bar badge. Admin's list above is a live backlog with no read
+ * state, so admin's badge is simply its size (the bell's original behavior); everyone else's
+ * badge is how many of their own persisted notifications are still unread — and goes to zero
+ * the moment they open the bell (see mark_notifications_read()).
+ */
+function notification_count(array $user): int
+{
+    if ($user['role'] === 'admin') {
+        return count(get_notifications($user));
+    }
+    $stmt = db()->prepare('SELECT COUNT(*) FROM notifications WHERE user_id = ? AND read_at IS NULL');
+    $stmt->execute([$user['id']]);
+    return (int) $stmt->fetchColumn();
 }
 
 function render_header(string $title, ?string $subtitle = null): void
@@ -244,7 +295,7 @@ tailwind.config = {
 </head>
 <body class="bg-slate-50 dark:bg-slate-900 text-slate-800 min-h-screen no-print">
 <?php if ($user): ?>
-<?php $notifCount = notification_count($user); ?>
+<?php $notifications = get_notifications($user); $notifCount = notification_count($user); ?>
 <div class="flex min-h-screen">
   <aside class="w-64 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 flex-shrink-0 no-print flex flex-col sticky top-0 h-screen">
     <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-700">
@@ -275,11 +326,42 @@ tailwind.config = {
         <input type="text" id="page-search" placeholder="Search this page…" class="w-full pl-9 pr-3 py-2 text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-full focus:outline-none focus:ring-2 focus:ring-accent-500 focus:bg-white dark:focus:bg-slate-900">
       </div>
       <div class="flex items-center gap-3 ml-auto">
-        <div class="relative text-slate-400 dark:text-slate-500">
-          <?= icon_svg('bell', 'w-5 h-5') ?>
-          <?php if ($notifCount > 0): ?>
-          <span class="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 flex items-center justify-center rounded-full bg-rose-500 text-white text-[10px] font-semibold"><?= $notifCount > 9 ? '9+' : $notifCount ?></span>
-          <?php endif; ?>
+        <div class="relative">
+          <button type="button" id="notif-bell-btn" aria-haspopup="true" aria-expanded="false"
+            data-csrf="<?= htmlspecialchars(csrf_token()) ?>" data-mark-read-url="<?= htmlspecialchars(url('/mark_notifications_read.php')) ?>"
+            class="relative block text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300">
+            <?= icon_svg('bell', 'w-5 h-5') ?>
+            <?php if ($notifCount > 0): ?>
+            <span id="notif-badge" class="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 flex items-center justify-center rounded-full bg-rose-500 text-white text-[10px] font-semibold"><?= $notifCount > 9 ? '9+' : $notifCount ?></span>
+            <?php endif; ?>
+          </button>
+          <div id="notif-panel" class="hidden absolute right-0 top-full mt-2 w-80 max-h-96 overflow-y-auto bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg z-50">
+            <div class="px-4 py-3 border-b border-slate-100 dark:border-slate-700 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Notifications</div>
+            <?php
+              $notifColors = [
+                  'published' => ['bg-emerald-500', 'text-emerald-600 dark:text-emerald-400'],
+                  'returned_for_revision' => ['bg-rose-500', 'text-rose-600 dark:text-rose-400'],
+                  'submitted_for_review' => ['bg-amber-500', 'text-amber-600 dark:text-amber-400'],
+                  'edit_request' => ['bg-violet-500', 'text-violet-600 dark:text-violet-400'],
+                  'section_grade_published' => ['bg-sky-500', 'text-sky-600 dark:text-sky-400'],
+              ];
+            ?>
+            <?php if (!$notifications): ?>
+            <div class="px-4 py-6 text-center text-sm text-slate-400 dark:text-slate-500">You're all caught up.</div>
+            <?php else: ?>
+              <?php foreach ($notifications as $n): [$dotClass, $labelClass] = $notifColors[$n['type']] ?? ['bg-slate-400', 'text-slate-500']; ?>
+              <a href="<?= htmlspecialchars($n['href']) ?>" class="block px-4 py-3 border-b border-slate-50 dark:border-slate-700/50 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-700/50 <?= $n['read'] ? '' : 'bg-accent-50/60 dark:bg-accent-900/20' ?>">
+                <div class="flex items-center gap-2 mb-0.5">
+                  <span class="w-1.5 h-1.5 rounded-full flex-shrink-0 <?= $dotClass ?>"></span>
+                  <span class="text-xs font-semibold <?= $labelClass ?>"><?= htmlspecialchars($n['label']) ?></span>
+                  <?php if (!$n['read']): ?><span class="w-1.5 h-1.5 rounded-full bg-accent-500 ml-auto flex-shrink-0" aria-label="Unread"></span><?php endif; ?>
+                </div>
+                <div class="text-sm text-slate-700 dark:text-slate-200"><?= htmlspecialchars($n['detail']) ?></div>
+                <?php if ($n['time']): ?><div class="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5"><?= htmlspecialchars(date('M j, g:i A', strtotime($n['time']))) ?></div><?php endif; ?>
+              </a>
+              <?php endforeach; ?>
+            <?php endif; ?>
+          </div>
         </div>
         <div class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-full text-xs text-slate-500 dark:text-slate-400">
           <?= icon_svg('calendar', 'w-3.5 h-3.5') ?>

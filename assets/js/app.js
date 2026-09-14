@@ -16,6 +16,57 @@ document.getElementById('theme-toggle')?.addEventListener('click', function () {
   } catch (e) {}
 });
 
+// Notification bell dropdown (button + panel live in includes/layout.php's top bar, on every
+// page). Toggles on click, closes on an outside click or Escape — no page-specific init call
+// needed since app.js itself loads at the end of <body>, after these elements already exist.
+// Opening it also clears the unread badge: the number is removed from the DOM immediately (so
+// it visibly "goes away" the moment it's clicked, not after a reload) and, in the background,
+// POSTs to mark_notifications_read.php so it stays cleared on the next page load too. Fired at
+// most once per page view (markedRead flag) — reopening the same panel is a no-op server-side
+// anyway (UPDATE ... WHERE read_at IS NULL), but there's no reason to repeat the request.
+(function () {
+  var bellBtn = document.getElementById('notif-bell-btn');
+  var panel = document.getElementById('notif-panel');
+  if (!bellBtn || !panel) return;
+  var markedRead = false;
+
+  function markRead() {
+    if (markedRead) return;
+    markedRead = true;
+    var badge = document.getElementById('notif-badge');
+    if (badge) badge.remove();
+    var url = bellBtn.getAttribute('data-mark-read-url');
+    var csrf = bellBtn.getAttribute('data-csrf');
+    if (!url || !csrf) return;
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'csrf_token=' + encodeURIComponent(csrf),
+      credentials: 'same-origin',
+    }).catch(function () {});
+  }
+
+  bellBtn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    var willShow = panel.classList.contains('hidden');
+    panel.classList.toggle('hidden', !willShow);
+    bellBtn.setAttribute('aria-expanded', willShow ? 'true' : 'false');
+    if (willShow) markRead();
+  });
+  document.addEventListener('click', function (e) {
+    if (!panel.classList.contains('hidden') && !panel.contains(e.target) && e.target !== bellBtn) {
+      panel.classList.add('hidden');
+      bellBtn.setAttribute('aria-expanded', 'false');
+    }
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !panel.classList.contains('hidden')) {
+      panel.classList.add('hidden');
+      bellBtn.setAttribute('aria-expanded', 'false');
+    }
+  });
+})();
+
 document.querySelectorAll('form').forEach(function (form) {
   form.addEventListener('submit', function (e) {
     var message = (e.submitter && e.submitter.getAttribute('data-confirm')) || form.getAttribute('data-confirm');
@@ -45,9 +96,9 @@ function initHashHighlight() {
 
 /**
  * Mirrors a wide table's horizontal scrollbar at the top of the container too, so it's
- * reachable without scrolling all the way down past every row first (class_record.php /
- * headteacher/review.php). The top bar is an empty spacer sized to match the real table's
- * scrollWidth; scrolling either one moves the other in lockstep.
+ * reachable without scrolling all the way down past every row first (adviser/consolidated.php,
+ * headteacher/grade_summary.php). The top bar is an empty spacer sized to match the real
+ * table's scrollWidth; scrolling either one moves the other in lockstep.
  */
 function initTopScrollbar(topId, bottomId, spacerId) {
   var top = document.getElementById(topId);

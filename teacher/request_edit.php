@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/helpers.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     redirect('/teacher/index.php');
@@ -38,6 +39,19 @@ if ($reason === '') {
 } else {
     $pdo->prepare('INSERT INTO grade_edit_requests (section_subject_teacher_id, term, requested_by, reason) VALUES (?, ?, ?, ?)')
         ->execute([$sstId, $term, $assignment['teacher_id'], $reason]);
+
+    $supervisors = head_teachers_for_subject((int) $assignment['subject_id'], (int) $assignment['school_year_id']);
+    if ($supervisors) {
+        $teacherNameStmt = $pdo->prepare('SELECT full_name FROM users WHERE id = ?');
+        $teacherNameStmt->execute([$assignment['teacher_id']]);
+        $teacherName = $teacherNameStmt->fetchColumn() ?: 'A teacher';
+        $detail = $teacherName . ' · ' . $assignment['subject_name'] . ' · ' . $assignment['grade_level'] . ' - ' . $assignment['section_name'] . ' · Term ' . $term;
+        $href = url('/headteacher/review.php?sst_id=' . $sstId . '&term=' . $term);
+        foreach ($supervisors as $supervisor) {
+            notify((int) $supervisor['id'], 'edit_request', $sstId, (int) $assignment['section_id'], $term, $detail, $href);
+        }
+    }
+
     flash_set('success', 'Edit request sent to the Head Teacher for approval.');
 }
 

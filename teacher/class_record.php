@@ -236,6 +236,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (in_array($statusNow, ['not_started', 'in_progress', 'returned_for_revision'], true)) {
                 $pdo->prepare("UPDATE submission_status SET status = 'submitted_for_review', submitted_at = NOW(), revision_comment = NULL WHERE section_subject_teacher_id = ? AND term = ?")
                     ->execute([$sstId, $term]);
+
+                $supervisors = head_teachers_for_subject((int) $assignment['subject_id'], (int) $assignment['school_year_id']);
+                if ($supervisors) {
+                    $teacherNameStmt = $pdo->prepare('SELECT full_name FROM users WHERE id = ?');
+                    $teacherNameStmt->execute([$assignment['teacher_id']]);
+                    $teacherName = $teacherNameStmt->fetchColumn() ?: 'A teacher';
+                    $detail = $teacherName . ' · ' . $assignment['subject_name'] . ' · ' . $assignment['grade_level'] . ' - ' . $assignment['section_name'] . ' · Term ' . $term;
+                    $href = url('/headteacher/review.php?sst_id=' . $sstId . '&term=' . $term);
+                    foreach ($supervisors as $supervisor) {
+                        notify((int) $supervisor['id'], 'submitted_for_review', $sstId, (int) $assignment['section_id'], $term, $detail, $href);
+                    }
+                }
+
                 flash_set('success', 'Scores saved and submitted for Head Teacher review.');
             } else {
                 flash_set('error', 'This term cannot be submitted from its current status.');

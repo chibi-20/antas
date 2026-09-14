@@ -12,7 +12,7 @@ if ($term < 1 || $term > 3) {
     $term = 1;
 }
 
-$stmt = $pdo->prepare('SELECT sst.*, gl.name AS grade_level, sec.section_name, sub.subject_name, u.full_name AS teacher_name
+$stmt = $pdo->prepare('SELECT sst.*, gl.name AS grade_level, sec.section_name, sec.adviser_id, sub.subject_name, u.full_name AS teacher_name
     FROM section_subject_teachers sst
     JOIN sections sec ON sec.id = sst.section_id
     JOIN grade_levels gl ON gl.id = sec.grade_level_id
@@ -63,6 +63,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->prepare('UPDATE grade_edit_requests SET finalized_at = NOW() WHERE id = ?')->execute([$editRequestId]);
             }
 
+            $detail = $assignment['subject_name'] . ' · ' . $assignment['grade_level'] . ' - ' . $assignment['section_name'] . ' · Term ' . $term;
+            notify((int) $assignment['teacher_id'], 'published', $sstId, (int) $assignment['section_id'], $term, $detail,
+                url('/teacher/class_record.php?sst_id=' . $sstId . '&term=' . $term));
+            // "Published grade from his/her section via Consolidation Record" — the adviser,
+            // not the teacher who owns this one subject, since Consolidated Grades is where
+            // the adviser watches every subject across their whole section.
+            if ($assignment['adviser_id']) {
+                notify((int) $assignment['adviser_id'], 'section_grade_published', $sstId, (int) $assignment['section_id'], $term,
+                    $assignment['subject_name'] . ' published · ' . $assignment['grade_level'] . ' - ' . $assignment['section_name'] . ' · Term ' . $term,
+                    url('/adviser/consolidated.php?section_id=' . $assignment['section_id'] . '&term=' . $term));
+            }
+
             flash_set('success', 'Grades published.');
         } else {
             $comment = trim((string) ($_POST['revision_comment'] ?? ''));
@@ -71,6 +83,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $pdo->prepare("UPDATE submission_status SET status = 'returned_for_revision', reviewed_by = ?, reviewed_at = NOW(), revision_comment = ? WHERE section_subject_teacher_id = ? AND term = ?")
                     ->execute([$user['id'], $comment, $sstId, $term]);
+                notify((int) $assignment['teacher_id'], 'returned_for_revision', $sstId, (int) $assignment['section_id'], $term,
+                    $assignment['subject_name'] . ' · ' . $assignment['grade_level'] . ' - ' . $assignment['section_name'] . ' · Term ' . $term,
+                    url('/teacher/class_record.php?sst_id=' . $sstId . '&term=' . $term));
                 flash_set('success', 'Returned to teacher for revision.');
             }
         }
@@ -89,6 +104,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // treats 'returned_for_revision' as editable, no changes needed there.
             $pdo->prepare("UPDATE submission_status SET status = 'returned_for_revision', reviewed_by = ?, reviewed_at = NOW(), revision_comment = ? WHERE section_subject_teacher_id = ? AND term = ?")
                 ->execute([$user['id'], 'Edit request approved — ' . $er['reason'], $sstId, $term]);
+            notify((int) $assignment['teacher_id'], 'returned_for_revision', $sstId, (int) $assignment['section_id'], $term,
+                $assignment['subject_name'] . ' · ' . $assignment['grade_level'] . ' - ' . $assignment['section_name'] . ' · Term ' . $term,
+                url('/teacher/class_record.php?sst_id=' . $sstId . '&term=' . $term));
             // Snapshot every student THIS assignment covers (respecting sex_scope — approving
             // the boys' teacher's request must never snapshot/diff the girls' grades) as the
             // "old" value for this request's history — "new" gets filled in once republished.
@@ -269,72 +287,91 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
   </form>
 </div>
 
-<div id="grid-scroll-top" class="overflow-x-auto mb-1"><div id="grid-scroll-spacer" style="height:1px;"></div></div>
-<div id="grid-scroll-bottom" class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-x-auto mb-6">
-  <table class="text-sm min-w-full">
-    <thead class="bg-slate-50 text-slate-500 text-xs uppercase">
-      <tr>
-        <th class="text-left px-4 py-3 sticky left-0 bg-slate-50">Student</th>
-        <?php foreach (['WW', 'PT', 'EX'] as $type): ?>
-          <?php foreach ($itemsByType[$type] as $item): ?>
-            <th class="text-center px-3 py-3 whitespace-nowrap">
-              <div><?= h($item['item_name']) ?></div>
-              <div class="text-[10px] font-normal text-slate-400">/<?= rtrim(rtrim((string) $item['highest_possible_score'], '0'), '.') ?> · <span class="text-slate-800"><?= $componentLabels[$type] ?></span></div>
-            </th>
+<?php
+  // Same colored component bands and sticky header/frozen-column grid shape as
+  // teacher/class_record.php's own class record — this page shows the exact same data a
+  // teacher sees while filling it in, just read-only, so a Head Teacher reviewing it recognizes
+  // it as "the class record" rather than a different-looking summary table.
+  $componentBandClasses = [
+      'WW' => 'bg-violet-100 text-violet-700',
+      'PT' => 'bg-teal-100 text-teal-700',
+      'EX' => 'bg-orange-100 text-orange-700',
+  ];
+  $headSticky = 'sticky z-20 bg-slate-50';
+?>
+<div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mb-6">
+  <div id="grid-scroll-bottom" class="overflow-auto max-h-[70vh]">
+    <table class="text-sm min-w-full">
+      <thead class="text-slate-500 text-xs uppercase">
+        <tr>
+          <th rowspan="2" class="text-left px-4 py-3 sticky left-0 top-0 z-30 bg-slate-50">Student</th>
+          <?php foreach (['WW', 'PT', 'EX'] as $type): ?>
+            <?php if (!$itemsByType[$type]) continue; ?>
+            <th colspan="<?= count($itemsByType[$type]) ?>" class="h-8 text-center font-semibold normal-case <?= $headSticky ?> top-0 <?= $componentBandClasses[$type] ?>"><?= $componentLabels[$type] ?></th>
           <?php endforeach; ?>
-        <?php endforeach; ?>
-        <?php for ($t = 1; $t < $term; $t++): ?>
-          <th class="text-center px-3 py-3 whitespace-nowrap">Term <?= $t ?></th>
-        <?php endfor; ?>
-        <th class="text-center px-3 py-3">Initial Grade</th>
-        <th class="text-center px-3 py-3">Transmuted Grade</th>
-        <?php if ($term === 3): ?>
-          <th class="text-center px-3 py-3 whitespace-nowrap text-accent-600">Final Grade</th>
-        <?php endif; ?>
-        <th class="text-left px-3 py-3">Reason (if below 75)</th>
-      </tr>
-    </thead>
-    <tbody class="divide-y divide-slate-100">
-      <?php $lastSex = null; foreach ($students as $student): ?>
-      <?php if ($student['sex'] !== $lastSex): $lastSex = $student['sex']; ?>
-      <tr>
-        <td colspan="99" class="px-4 py-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide bg-slate-50 sticky left-0"><?= $student['sex'] === 'M' ? 'Male' : 'Female' ?></td>
-      </tr>
-      <?php endif; ?>
-      <?php
-          $gradeStmt->execute([$student['id'], $assignment['subject_id'], $term]);
-          $grade = $gradeStmt->fetch();
-      ?>
-      <tr id="student-<?= (int) $student['id'] ?>">
-        <td class="px-4 py-2 font-medium whitespace-nowrap sticky left-0 bg-white"><?= h($student['full_name']) ?></td>
-        <?php foreach (['WW', 'PT', 'EX'] as $type): ?>
-          <?php foreach ($itemsByType[$type] as $item): ?>
-            <td class="px-3 py-2 text-center text-slate-600"><?= h($scoreLookup[$item['id']][$student['id']] ?? '—') ?></td>
-          <?php endforeach; ?>
-        <?php endforeach; ?>
-        <?php for ($t = 1; $t < $term; $t++): $pg = $priorGrades[$t][$student['id']] ?? null; ?>
-          <td class="px-3 py-2 text-center <?= $pg !== null ? grade_display_class((float) $pg) : 'text-slate-500' ?>"><?= $pg !== null ? h($pg) : '<span class="text-slate-300">—</span>' ?></td>
-        <?php endfor; ?>
-        <td class="px-3 py-2 text-center font-medium"><?= $grade && $grade['initial_grade'] !== null ? h($grade['initial_grade']) : '<span class="text-slate-300">—</span>' ?></td>
-        <td class="px-3 py-2 text-center font-semibold <?= $grade && $grade['transmuted_grade'] !== null ? (grade_display_class((float) $grade['transmuted_grade']) ?: 'text-accent-700') : 'text-accent-700' ?>"><?= $grade && $grade['transmuted_grade'] !== null ? h($grade['transmuted_grade']) : '<span class="text-slate-300">—</span>' ?></td>
-        <?php if ($term === 3): $fg = $finalGrades[$student['id']] ?? null; ?>
-          <td class="px-3 py-2 text-center font-semibold <?= $fg !== null ? (grade_display_class((float) $fg) ?: 'text-accent-700') : 'text-accent-700' ?>"><?= $fg !== null ? h($fg) : '—' ?></td>
-        <?php endif; ?>
-        <td class="px-3 py-2 text-left text-xs text-slate-500 max-w-[220px]">
-          <?php $reason = $failReasons[$student['id']] ?? null; ?>
-          <?php if ($grade && $grade['transmuted_grade'] !== null && (float) $grade['transmuted_grade'] < 75): ?>
-            <?= $reason !== null ? h($reason) : '<span class="text-amber-500 italic">Not yet given</span>' ?>
-          <?php else: ?>
-            <span class="text-slate-300">—</span>
+          <?php for ($t = 1; $t < $term; $t++): ?>
+            <th rowspan="2" class="text-center px-3 py-3 whitespace-nowrap <?= $headSticky ?> top-0">Term <?= $t ?></th>
+          <?php endfor; ?>
+          <th rowspan="2" class="text-center px-3 py-3 <?= $headSticky ?> top-0">Initial Grade</th>
+          <th rowspan="2" class="text-center px-3 py-3 <?= $headSticky ?> top-0">Transmuted Grade</th>
+          <?php if ($term === 3): ?>
+            <th rowspan="2" class="text-center px-3 py-3 whitespace-nowrap text-accent-600 <?= $headSticky ?> top-0">Final Grade</th>
           <?php endif; ?>
-        </td>
-      </tr>
-      <?php endforeach; ?>
-      <?php if (!$students): ?>
-      <tr><td colspan="99" class="px-4 py-6 text-center text-slate-400">No students in this section yet.</td></tr>
-      <?php endif; ?>
-    </tbody>
-  </table>
+          <th rowspan="2" class="text-left px-3 py-3 <?= $headSticky ?> top-0">Reason (if below 75)</th>
+        </tr>
+        <tr>
+          <?php foreach (['WW', 'PT', 'EX'] as $type): ?>
+            <?php foreach ($itemsByType[$type] as $item): ?>
+              <th class="text-center px-2 py-2 whitespace-nowrap font-semibold normal-case <?= $headSticky ?> top-8">
+                <?= h($item['item_name']) ?>
+                <div class="text-[10px] font-normal text-slate-400">/<?= rtrim(rtrim((string) $item['highest_possible_score'], '0'), '.') ?></div>
+              </th>
+            <?php endforeach; ?>
+          <?php endforeach; ?>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100">
+        <?php $lastSex = null; foreach ($students as $student): ?>
+        <?php if ($student['sex'] !== $lastSex): $lastSex = $student['sex']; ?>
+        <tr>
+          <td colspan="99" class="px-4 py-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide bg-slate-50 sticky left-0 z-10"><?= $student['sex'] === 'M' ? 'Male' : 'Female' ?></td>
+        </tr>
+        <?php endif; ?>
+        <?php
+            $gradeStmt->execute([$student['id'], $assignment['subject_id'], $term]);
+            $grade = $gradeStmt->fetch();
+        ?>
+        <tr id="student-<?= (int) $student['id'] ?>">
+          <td class="px-4 py-2 font-medium whitespace-nowrap sticky left-0 z-10 bg-white"><?= h($student['full_name']) ?></td>
+          <?php foreach (['WW', 'PT', 'EX'] as $type): ?>
+            <?php foreach ($itemsByType[$type] as $item): ?>
+              <td class="px-3 py-2 text-center text-slate-600"><?= h($scoreLookup[$item['id']][$student['id']] ?? '—') ?></td>
+            <?php endforeach; ?>
+          <?php endforeach; ?>
+          <?php for ($t = 1; $t < $term; $t++): $pg = $priorGrades[$t][$student['id']] ?? null; ?>
+            <td class="px-3 py-2 text-center <?= $pg !== null ? grade_display_class((float) $pg) : 'text-slate-500' ?>"><?= $pg !== null ? h($pg) : '<span class="text-slate-300">—</span>' ?></td>
+          <?php endfor; ?>
+          <td class="px-3 py-2 text-center font-medium"><?= $grade && $grade['initial_grade'] !== null ? h($grade['initial_grade']) : '<span class="text-slate-300">—</span>' ?></td>
+          <td class="px-3 py-2 text-center font-semibold <?= $grade && $grade['transmuted_grade'] !== null ? (grade_display_class((float) $grade['transmuted_grade']) ?: 'text-accent-700') : 'text-accent-700' ?>"><?= $grade && $grade['transmuted_grade'] !== null ? h($grade['transmuted_grade']) : '<span class="text-slate-300">—</span>' ?></td>
+          <?php if ($term === 3): $fg = $finalGrades[$student['id']] ?? null; ?>
+            <td class="px-3 py-2 text-center font-semibold <?= $fg !== null ? (grade_display_class((float) $fg) ?: 'text-accent-700') : 'text-accent-700' ?>"><?= $fg !== null ? h($fg) : '—' ?></td>
+          <?php endif; ?>
+          <td class="px-3 py-2 text-left text-xs text-slate-500 max-w-[220px]">
+            <?php $reason = $failReasons[$student['id']] ?? null; ?>
+            <?php if ($grade && $grade['transmuted_grade'] !== null && (float) $grade['transmuted_grade'] < 75): ?>
+              <?= $reason !== null ? h($reason) : '<span class="text-amber-500 italic">Not yet given</span>' ?>
+            <?php else: ?>
+              <span class="text-slate-300">—</span>
+            <?php endif; ?>
+          </td>
+        </tr>
+        <?php endforeach; ?>
+        <?php if (!$students): ?>
+        <tr><td colspan="99" class="px-4 py-6 text-center text-slate-400">No students in this section yet.</td></tr>
+        <?php endif; ?>
+      </tbody>
+    </table>
+  </div>
 </div>
 
 <?php if ($submission && $submission['status'] === 'submitted_for_review'): ?>
@@ -387,7 +424,6 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
 <?php endif; ?>
 <script>
 window.addEventListener('DOMContentLoaded', function () {
-  initTopScrollbar('grid-scroll-top', 'grid-scroll-bottom', 'grid-scroll-spacer');
   initHashHighlight();
 });
 </script>
