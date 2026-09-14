@@ -130,16 +130,54 @@ if ($sectionId) {
     exit;
 }
 
+$gridTerm = (int) ($_GET['term'] ?? 1);
+if ($gridTerm < 1 || $gridTerm > 3) {
+    $gridTerm = 1;
+}
+
 $sections = get_supervised_sections($user['id'], (int) $year['id']);
+$supervisedSubjectIds = get_supervised_subject_ids($user['id'], (int) $year['id']);
+
+// One aggregate query across every supervised section instead of resolving each section's
+// roster individually (as the drill-in above does via get_consolidated_data) — with 100+
+// sections that per-section approach would mean 100+ rounds of queries just to paint this
+// grid. effective_term_grades already resolves the same sex/major/MAPEH-merge scoping
+// get_consolidated_data does, so a single grouped count against it is both correct and cheap.
+$atRiskCounts = [];
+if ($sections && $supervisedSubjectIds) {
+    $subjectPlaceholders = implode(',', array_fill(0, count($supervisedSubjectIds), '?'));
+    $countStmt = $pdo->prepare("SELECT eg.section_id, COUNT(DISTINCT eg.student_id) AS at_risk_count
+        FROM effective_term_grades eg
+        JOIN students st ON st.id = eg.student_id AND st.is_active = 1
+        WHERE eg.term = ? AND eg.school_year_id = ? AND eg.subject_id IN ($subjectPlaceholders) AND eg.transmuted_grade < 75
+        GROUP BY eg.section_id");
+    $countStmt->execute(array_merge([$gridTerm, $year['id']], $supervisedSubjectIds));
+    foreach ($countStmt->fetchAll() as $row) {
+        $atRiskCounts[(int) $row['section_id']] = (int) $row['at_risk_count'];
+    }
+}
 
 render_header('At Risk', 'Sections where you supervise at least one subject — click through to see students below 75.');
 echo ht_tab_nav('at_risk');
 ?>
+<form method="get" class="flex gap-1 mb-6">
+  <?php for ($t = 1; $t <= 3; $t++): ?>
+    <button type="submit" name="term" value="<?= $t ?>" class="px-3 py-1.5 rounded-lg text-sm <?= $t === $gridTerm ? 'bg-accent-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50' ?>">Term <?= $t ?></button>
+  <?php endfor; ?>
+</form>
 <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-  <?php foreach ($sections as $sec): ?>
-  <a href="<?= h(url('/headteacher/at_risk.php?section_id=' . $sec['id'])) ?>" class="block bg-white border border-slate-200 rounded-xl shadow-sm p-5 hover:border-accent-300 hover:shadow-md transition-shadow">
+  <?php foreach ($sections as $sec): $count = $atRiskCounts[$sec['id']] ?? 0; ?>
+  <a href="<?= h(url('/headteacher/at_risk.php?section_id=' . $sec['id'] . '&term=' . $gridTerm)) ?>" class="relative block bg-white border border-slate-200 rounded-xl shadow-sm p-5 hover:border-accent-300 hover:shadow-md transition-shadow">
+    <?php if ($count > 0): ?>
+    <span class="absolute -top-2 -right-2 min-w-[22px] h-[22px] px-1.5 flex items-center justify-center rounded-full bg-rose-500 text-white text-xs font-semibold shadow-sm"><?= $count ?></span>
+    <?php endif; ?>
     <div class="font-semibold text-slate-800"><?= h($sec['grade_level'] . ' - ' . $sec['section_name']) ?></div>
     <div class="text-xs text-slate-400 mt-1"><?= h($year['year_label']) ?></div>
+    <?php if ($count > 0): ?>
+      <div class="text-xs text-rose-600 font-medium mt-2"><?= $count ?> student<?= $count === 1 ? '' : 's' ?> below 75</div>
+    <?php else: ?>
+      <div class="text-xs text-emerald-600 mt-2">No students below 75</div>
+    <?php endif; ?>
   </a>
   <?php endforeach; ?>
   <?php if (!$sections): ?>
