@@ -79,62 +79,62 @@ if (isset($_GET['edit'])) {
 
 render_header('Users');
 ?>
-<div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6 mb-6 max-w-lg">
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-6 mb-6 max-w-lg">
   <div class="flex items-center justify-between mb-4">
-    <h2 class="text-sm font-semibold text-slate-600"><?= $editing ? 'Edit User' : 'Add User' ?></h2>
-    <a href="<?= h(url('/admin/import_teachers.php')) ?>" class="px-3 py-1.5 rounded-lg text-sm bg-slate-100 text-slate-600 hover:bg-slate-200">Import Teachers</a>
+    <h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300"><?= $editing ? 'Edit User' : 'Add User' ?></h2>
+    <a href="<?= h(url('/admin/import_teachers.php')) ?>" class="px-3 py-1.5 rounded-lg text-sm bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600">Import Teachers</a>
   </div>
   <form method="post">
     <?= csrf_field() ?>
     <input type="hidden" name="action" value="<?= $editing ? 'update' : 'create' ?>">
     <?php if ($editing): ?><input type="hidden" name="id" value="<?= (int) $editing['id'] ?>"><?php endif; ?>
-    <label class="block text-sm font-medium text-slate-600 mb-1">Full name</label>
-    <input type="text" name="full_name" required value="<?= h($editing['full_name'] ?? '') ?>" class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+    <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Full name</label>
+    <input type="text" name="full_name" required value="<?= h($editing['full_name'] ?? '') ?>" class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
     <div class="grid grid-cols-2 gap-3 mb-4">
-      <div><label class="block text-xs font-medium text-slate-500 mb-1">Username</label><input type="text" name="username" required value="<?= h($editing['username'] ?? '') ?>" class="w-full px-3 py-2 border border-slate-300 rounded-lg"></div>
-      <div><label class="block text-xs font-medium text-slate-500 mb-1">Employee #</label><input type="text" name="employee_number" value="<?= h($editing['employee_number'] ?? '') ?>" class="w-full px-3 py-2 border border-slate-300 rounded-lg"></div>
+      <div><label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Username</label><input type="text" name="username" required value="<?= h($editing['username'] ?? '') ?>" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg"></div>
+      <div><label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Employee #</label><input type="text" name="employee_number" value="<?= h($editing['employee_number'] ?? '') ?>" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg"></div>
     </div>
-    <label class="block text-sm font-medium text-slate-600 mb-1">Email (optional)</label>
-    <input type="email" name="email" value="<?= h($editing['email'] ?? '') ?>" class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
-    <label class="block text-sm font-medium text-slate-600 mb-1">Role</label>
-    <select name="role" required class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+    <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Email (optional)</label>
+    <input type="email" name="email" value="<?= h($editing['email'] ?? '') ?>" class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
+    <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Role</label>
+    <select name="role" required class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
       <?php foreach ($roles as $r): ?>
         <option value="<?= h($r) ?>" <?= ($editing['role'] ?? '') === $r ? 'selected' : '' ?>><?= h(ucwords(str_replace('_', ' ', $r))) ?></option>
       <?php endforeach; ?>
     </select>
-    <label class="block text-sm font-medium text-slate-600 mb-1"><?= $editing ? 'New password (leave blank to keep current)' : 'Password' ?></label>
-    <input type="password" name="password" <?= $editing ? '' : 'required' ?> class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+    <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1"><?= $editing ? 'New password (leave blank to keep current)' : 'Password' ?></label>
+    <input type="password" name="password" <?= $editing ? '' : 'required' ?> class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
     <div class="flex gap-2">
       <button type="submit" class="bg-accent-600 hover:bg-accent-700 text-white font-medium px-4 py-2 rounded-lg text-sm"><?= $editing ? 'Save Changes' : 'Add' ?></button>
-      <?php if ($editing): ?><a href="<?= h(url('/admin/users.php')) ?>" class="px-4 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-100">Cancel</a><?php endif; ?>
+      <?php if ($editing): ?><a href="<?= h(url('/admin/users.php')) ?>" class="px-4 py-2 rounded-lg text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">Cancel</a><?php endif; ?>
     </div>
   </form>
 </div>
 
-<input type="text" id="user-search" placeholder="Search by name or username…" class="w-full max-w-sm mb-3 px-3 py-2 border border-slate-300 rounded-lg text-sm">
-<div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+<input type="text" id="user-search" placeholder="Search by name or username…" class="w-full max-w-sm mb-3 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm">
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden">
   <table class="w-full text-sm">
-    <thead class="bg-slate-50 text-slate-500 text-xs uppercase">
+    <thead class="bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 text-xs uppercase">
       <tr><th class="text-left px-4 py-3">Name</th><th class="text-left px-4 py-3">Username</th><th class="text-left px-4 py-3">Role</th><th class="text-left px-4 py-3">Also</th><th class="text-left px-4 py-3">Status</th><th class="px-4 py-3"></th></tr>
     </thead>
-    <tbody class="divide-y divide-slate-100">
+    <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
       <?php foreach ($users as $u): ?>
       <tr class="js-user-search-row" data-search="<?= h($u['full_name'] . ' ' . $u['username']) ?>">
         <td class="px-4 py-3 font-medium"><?= h($u['full_name']) ?></td>
-        <td class="px-4 py-3 text-slate-600"><?= h($u['username']) ?></td>
-        <td class="px-4 py-3 text-slate-600"><?= h(ucwords(str_replace('_', ' ', $u['role']))) ?></td>
+        <td class="px-4 py-3 text-slate-600 dark:text-slate-300"><?= h($u['username']) ?></td>
+        <td class="px-4 py-3 text-slate-600 dark:text-slate-300"><?= h(ucwords(str_replace('_', ' ', $u['role']))) ?></td>
         <td class="px-4 py-3 space-x-1">
-          <?php if (in_array($u['id'], $adviserIds)): ?><span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">Adviser</span><?php endif; ?>
-          <?php if (in_array($u['id'], $headTeacherIds)): ?><span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-cyan-100 text-cyan-700">Head Teacher</span><?php endif; ?>
+          <?php if (in_array($u['id'], $adviserIds)): ?><span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300">Adviser</span><?php endif; ?>
+          <?php if (in_array($u['id'], $headTeacherIds)): ?><span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-cyan-100 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300">Head Teacher</span><?php endif; ?>
         </td>
-        <td class="px-4 py-3"><?= $u['is_active'] ? '<span class="text-emerald-600">Active</span>' : '<span class="text-slate-400">Inactive</span>' ?></td>
+        <td class="px-4 py-3"><?= $u['is_active'] ? '<span class="text-emerald-600 dark:text-emerald-400">Active</span>' : '<span class="text-slate-400 dark:text-slate-500">Inactive</span>' ?></td>
         <td class="px-4 py-3 text-right space-x-2">
-          <a href="<?= h(url('/admin/users.php?edit=' . $u['id'])) ?>" class="text-accent-600 hover:underline">Edit</a>
+          <a href="<?= h(url('/admin/users.php?edit=' . $u['id'])) ?>" class="text-accent-600 dark:text-accent-400 hover:underline">Edit</a>
           <form method="post" class="inline">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="toggle_active">
             <input type="hidden" name="id" value="<?= (int) $u['id'] ?>">
-            <button type="submit" class="text-slate-500 hover:underline"><?= $u['is_active'] ? 'Deactivate' : 'Activate' ?></button>
+            <button type="submit" class="text-slate-500 dark:text-slate-400 hover:underline"><?= $u['is_active'] ? 'Deactivate' : 'Activate' ?></button>
           </form>
         </td>
       </tr>

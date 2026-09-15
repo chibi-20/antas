@@ -40,26 +40,26 @@ render_header('Change Password');
 ?>
 <div class="max-w-md">
   <?php if (!empty($user['must_change_password'])): ?>
-  <div class="mb-4 px-4 py-3 rounded-lg text-sm bg-amber-50 text-amber-700 border border-amber-200">
+  <div class="mb-4 px-4 py-3 rounded-lg text-sm bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
     You're using the default password from your account setup — set your own to continue.
   </div>
   <?php endif; ?>
 
-  <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-6">
     <?php if ($error): ?>
-    <div class="mb-4 px-4 py-3 rounded-lg text-sm bg-rose-50 text-rose-700 border border-rose-200"><?= htmlspecialchars($error) ?></div>
+    <div class="mb-4 px-4 py-3 rounded-lg text-sm bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800"><?= htmlspecialchars($error) ?></div>
     <?php endif; ?>
     <form method="post">
       <?= csrf_field() ?>
-      <label class="block text-sm font-medium text-slate-600 mb-1">Current password</label>
-      <input type="password" name="current_password" required class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
-      <label class="block text-sm font-medium text-slate-600 mb-1">New password</label>
-      <input type="password" name="new_password" required minlength="8" class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
-      <label class="block text-sm font-medium text-slate-600 mb-1">Confirm new password</label>
-      <input type="password" name="confirm_password" required minlength="8" class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+      <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Current password</label>
+      <input type="password" name="current_password" required class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
+      <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">New password</label>
+      <input type="password" name="new_password" required minlength="8" class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
+      <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Confirm new password</label>
+      <input type="password" name="confirm_password" required minlength="8" class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
       <button type="submit" class="bg-accent-600 hover:bg-accent-700 text-white font-medium px-4 py-2 rounded-lg text-sm">Change Password</button>
       <?php if (empty($user['must_change_password'])): ?>
-      <a href="<?= htmlspecialchars(url('/index.php')) ?>" class="px-4 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-100">Cancel</a>
+      <a href="<?= htmlspecialchars(url('/index.php')) ?>" class="px-4 py-2 rounded-lg text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">Cancel</a>
       <?php endif; ?>
     </form>
   </div>

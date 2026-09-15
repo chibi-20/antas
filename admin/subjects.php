@@ -102,70 +102,70 @@ $parentOptions = array_values(array_filter($subjects, function ($s) use ($editin
 
 render_header('Subjects');
 ?>
-<div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6 mb-6 max-w-lg">
-  <h2 class="text-sm font-semibold text-slate-600 mb-4"><?= $editing ? 'Edit Subject' : 'Add Subject' ?></h2>
-  <p class="text-xs text-slate-400 mb-4">Subjects apply across every grade level — which grade a subject is actually taught in is set per section under Assignments. For a MAPEH-style compound subject (graded as separate components that merge into one report-card grade), create the merged subject first (e.g. "MAPEH"), then create each component (e.g. "Music-Arts", "PE-Health") with its Parent subject set to it — components are taught, encoded, and reviewed independently; the parent's grade is the average of its components once all are published, and its own weight profile is unused.</p>
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-6 mb-6 max-w-lg">
+  <h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-4"><?= $editing ? 'Edit Subject' : 'Add Subject' ?></h2>
+  <p class="text-xs text-slate-400 dark:text-slate-500 mb-4">Subjects apply across every grade level — which grade a subject is actually taught in is set per section under Assignments. For a MAPEH-style compound subject (graded as separate components that merge into one report-card grade), create the merged subject first (e.g. "MAPEH"), then create each component (e.g. "Music-Arts", "PE-Health") with its Parent subject set to it — components are taught, encoded, and reviewed independently; the parent's grade is the average of its components once all are published, and its own weight profile is unused.</p>
   <form method="post">
     <?= csrf_field() ?>
     <input type="hidden" name="action" value="<?= $editing ? 'update' : 'create' ?>">
     <?php if ($editing): ?><input type="hidden" name="id" value="<?= (int) $editing['id'] ?>"><?php endif; ?>
-    <label class="block text-sm font-medium text-slate-600 mb-1">Subject name</label>
-    <input type="text" name="subject_name" required value="<?= h($editing['subject_name'] ?? '') ?>" class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
-    <label class="block text-sm font-medium text-slate-600 mb-1">Subject code</label>
-    <input type="text" name="subject_code" required value="<?= h($editing['subject_code'] ?? '') ?>" class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
-    <label class="block text-sm font-medium text-slate-600 mb-1">Sort order</label>
-    <input type="number" name="sort_order" value="<?= h($editing['sort_order'] ?? 100) ?>" class="w-full mb-1 px-3 py-2 border border-slate-300 rounded-lg">
-    <p class="text-xs text-slate-400 mb-4">Controls display order on Consolidated Grades and Card Slips — lower numbers appear first. A compound component's own value is unused; it always displays right after its parent.</p>
-    <label class="block text-sm font-medium text-slate-600 mb-1">Weight profile</label>
-    <select name="weight_profile_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+    <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Subject name</label>
+    <input type="text" name="subject_name" required value="<?= h($editing['subject_name'] ?? '') ?>" class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
+    <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Subject code</label>
+    <input type="text" name="subject_code" required value="<?= h($editing['subject_code'] ?? '') ?>" class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
+    <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Sort order</label>
+    <input type="number" name="sort_order" value="<?= h($editing['sort_order'] ?? 100) ?>" class="w-full mb-1 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
+    <p class="text-xs text-slate-400 dark:text-slate-500 mb-4">Controls display order on Consolidated Grades and Card Slips — lower numbers appear first. A compound component's own value is unused; it always displays right after its parent.</p>
+    <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Weight profile</label>
+    <select name="weight_profile_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
       <option value="">Select a weight profile…</option>
       <?= select_options($weightProfiles, 'id', 'profile_name', $editing['weight_profile_id'] ?? null) ?>
     </select>
-    <label class="block text-sm font-medium text-slate-600 mb-1">Parent subject (optional — for MAPEH-style components)</label>
-    <select name="parent_subject_id" class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+    <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Parent subject (optional — for MAPEH-style components)</label>
+    <select name="parent_subject_id" class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
       <option value="">None — this is a regular subject</option>
       <?= select_options($parentOptions, 'id', 'subject_name', $editing['parent_subject_id'] ?? null) ?>
     </select>
     <div class="flex gap-2">
       <button type="submit" class="bg-accent-600 hover:bg-accent-700 text-white font-medium px-4 py-2 rounded-lg text-sm"><?= $editing ? 'Save Changes' : 'Add' ?></button>
-      <?php if ($editing): ?><a href="<?= h(url('/admin/subjects.php')) ?>" class="px-4 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-100">Cancel</a><?php endif; ?>
+      <?php if ($editing): ?><a href="<?= h(url('/admin/subjects.php')) ?>" class="px-4 py-2 rounded-lg text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">Cancel</a><?php endif; ?>
     </div>
   </form>
 </div>
 
-<div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden">
   <table class="w-full text-sm">
-    <thead class="bg-slate-50 text-slate-500 text-xs uppercase">
+    <thead class="bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 text-xs uppercase">
       <tr><th class="text-left px-4 py-3">Subject</th><th class="text-left px-4 py-3">Code</th><th class="text-left px-4 py-3">Order</th><th class="text-left px-4 py-3">Weight Profile</th><th class="text-left px-4 py-3">Status</th><th class="px-4 py-3"></th></tr>
     </thead>
-    <tbody class="divide-y divide-slate-100">
+    <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
       <?php foreach ($subjects as $s): ?>
       <tr>
         <td class="px-4 py-3 font-medium">
           <?= h($s['subject_name']) ?>
           <?php if (in_array($s['id'], $parentIds)): ?>
-            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-700 ml-1">Compound</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 ml-1">Compound</span>
           <?php elseif ($s['parent_name']): ?>
-            <span class="text-xs text-slate-400 block">Part of <?= h($s['parent_name']) ?></span>
+            <span class="text-xs text-slate-400 dark:text-slate-500 block">Part of <?= h($s['parent_name']) ?></span>
           <?php endif; ?>
         </td>
-        <td class="px-4 py-3 text-slate-600"><?= h($s['subject_code']) ?></td>
-        <td class="px-4 py-3 text-slate-500"><?= $s['parent_subject_id'] ? '—' : (int) $s['sort_order'] ?></td>
-        <td class="px-4 py-3 text-slate-600"><?= h($s['profile_name']) ?></td>
-        <td class="px-4 py-3"><?= $s['is_active'] ? '<span class="text-emerald-600">Active</span>' : '<span class="text-slate-400">Inactive</span>' ?></td>
+        <td class="px-4 py-3 text-slate-600 dark:text-slate-300"><?= h($s['subject_code']) ?></td>
+        <td class="px-4 py-3 text-slate-500 dark:text-slate-400"><?= $s['parent_subject_id'] ? '—' : (int) $s['sort_order'] ?></td>
+        <td class="px-4 py-3 text-slate-600 dark:text-slate-300"><?= h($s['profile_name']) ?></td>
+        <td class="px-4 py-3"><?= $s['is_active'] ? '<span class="text-emerald-600 dark:text-emerald-400">Active</span>' : '<span class="text-slate-400 dark:text-slate-500">Inactive</span>' ?></td>
         <td class="px-4 py-3 text-right space-x-2">
-          <a href="<?= h(url('/admin/subjects.php?edit=' . $s['id'])) ?>" class="text-accent-600 hover:underline">Edit</a>
+          <a href="<?= h(url('/admin/subjects.php?edit=' . $s['id'])) ?>" class="text-accent-600 dark:text-accent-400 hover:underline">Edit</a>
           <form method="post" class="inline">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="toggle_active">
             <input type="hidden" name="id" value="<?= (int) $s['id'] ?>">
-            <button type="submit" class="text-slate-500 hover:underline"><?= $s['is_active'] ? 'Deactivate' : 'Activate' ?></button>
+            <button type="submit" class="text-slate-500 dark:text-slate-400 hover:underline"><?= $s['is_active'] ? 'Deactivate' : 'Activate' ?></button>
           </form>
           <form method="post" class="inline" data-confirm="Delete this subject permanently? Only works if it's never been assigned, graded, or supervised — otherwise deactivate it instead.">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="delete">
             <input type="hidden" name="id" value="<?= (int) $s['id'] ?>">
-            <button type="submit" class="text-rose-500 hover:underline">Delete</button>
+            <button type="submit" class="text-rose-500 dark:text-rose-400 hover:underline">Delete</button>
           </form>
         </td>
       </tr>

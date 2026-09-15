@@ -85,39 +85,39 @@ if ($sectionId) {
     render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · At Risk');
     echo ht_tab_nav('at_risk');
     ?>
-    <a href="<?= h(url('/headteacher/at_risk.php')) ?>" class="inline-block mb-4 text-sm text-accent-600 hover:underline">&larr; Back to Sections</a>
+    <a href="<?= h(url('/headteacher/at_risk.php')) ?>" class="inline-block mb-4 text-sm text-accent-600 dark:text-accent-400 hover:underline">&larr; Back to Sections</a>
     <div class="flex items-center justify-between mb-6">
       <form method="get" class="flex gap-1">
         <input type="hidden" name="section_id" value="<?= $sectionId ?>">
         <?php for ($t = 1; $t <= 3; $t++): ?>
-          <button type="submit" name="term" value="<?= $t ?>" class="px-3 py-1.5 rounded-lg text-sm <?= $t === $term ? 'bg-accent-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50' ?>">Term <?= $t ?></button>
+          <button type="submit" name="term" value="<?= $t ?>" class="px-3 py-1.5 rounded-lg text-sm <?= $t === $term ? 'bg-accent-600 text-white' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700' ?>">Term <?= $t ?></button>
         <?php endfor; ?>
       </form>
-      <div class="text-sm text-slate-500">
-        <span class="font-semibold text-rose-600"><?= count($atRisk) ?></span> student<?= count($atRisk) === 1 ? '' : 's' ?>
-        · <span class="font-semibold text-rose-600"><?= $failingSubjectCount ?></span> subject grade<?= $failingSubjectCount === 1 ? '' : 's' ?> below 75
+      <div class="text-sm text-slate-500 dark:text-slate-400">
+        <span class="font-semibold text-rose-600 dark:text-rose-400"><?= count($atRisk) ?></span> student<?= count($atRisk) === 1 ? '' : 's' ?>
+        · <span class="font-semibold text-rose-600 dark:text-rose-400"><?= $failingSubjectCount ?></span> subject grade<?= $failingSubjectCount === 1 ? '' : 's' ?> below 75
       </div>
     </div>
 
     <?php if (!$atRisk): ?>
-    <div class="bg-white border border-slate-200 rounded-xl shadow-sm px-4 py-8 text-center text-slate-400 text-sm">No students below 75 in your supervised subject(s) for this term.</div>
+    <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm px-4 py-8 text-center text-slate-400 dark:text-slate-500 text-sm">No students below 75 in your supervised subject(s) for this term.</div>
     <?php else: ?>
-    <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+    <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden">
       <table class="w-full text-sm">
-        <thead class="bg-slate-50 text-slate-500 text-xs uppercase">
+        <thead class="bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 text-xs uppercase">
           <tr><th class="text-left px-4 py-3">Student</th><th class="text-left px-4 py-3">Subject</th><th class="text-left px-4 py-3">Grade</th><th class="text-left px-4 py-3">Status</th><th class="text-left px-4 py-3">Reason</th></tr>
         </thead>
-        <tbody class="divide-y divide-slate-100">
+        <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
           <?php foreach ($atRisk as $row): ?>
             <?php foreach ($row['subjects'] as $i => $s): ?>
             <tr>
-              <td class="px-4 py-3 font-medium <?= $i > 0 ? 'text-slate-300' : '' ?>"><?= $i === 0 ? h($row['student']['full_name']) : '' ?></td>
-              <td class="px-4 py-3 text-slate-600"><?= h($s['name']) ?></td>
+              <td class="px-4 py-3 font-medium <?= $i > 0 ? 'text-slate-300 dark:text-slate-600' : '' ?>"><?= $i === 0 ? h($row['student']['full_name']) : '' ?></td>
+              <td class="px-4 py-3 text-slate-600 dark:text-slate-300"><?= h($s['name']) ?></td>
               <td class="px-4 py-3 <?= grade_display_class((float) $s['grade']) ?>"><?= h($s['grade']) ?></td>
               <td class="px-4 py-3">
-                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium <?= $s['band'] === 'Failing' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700' ?>"><?= h($s['band']) ?></span>
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium <?= $s['band'] === 'Failing' ? 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300' : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300' ?>"><?= h($s['band']) ?></span>
               </td>
-              <td class="px-4 py-3 text-slate-500 text-xs"><?= $s['reason'] !== null ? h($s['reason']) : '<span class="text-slate-300 italic">Not yet given</span>' ?></td>
+              <td class="px-4 py-3 text-slate-500 dark:text-slate-400 text-xs"><?= $s['reason'] !== null ? h($s['reason']) : '<span class="text-slate-300 dark:text-slate-600 italic">Not yet given</span>' ?></td>
             </tr>
             <?php endforeach; ?>
           <?php endforeach; ?>
@@ -162,26 +162,26 @@ echo ht_tab_nav('at_risk');
 ?>
 <form method="get" class="flex gap-1 mb-6">
   <?php for ($t = 1; $t <= 3; $t++): ?>
-    <button type="submit" name="term" value="<?= $t ?>" class="px-3 py-1.5 rounded-lg text-sm <?= $t === $gridTerm ? 'bg-accent-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50' ?>">Term <?= $t ?></button>
+    <button type="submit" name="term" value="<?= $t ?>" class="px-3 py-1.5 rounded-lg text-sm <?= $t === $gridTerm ? 'bg-accent-600 text-white' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700' ?>">Term <?= $t ?></button>
   <?php endfor; ?>
 </form>
 <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
   <?php foreach ($sections as $sec): $count = $atRiskCounts[$sec['id']] ?? 0; ?>
-  <a href="<?= h(url('/headteacher/at_risk.php?section_id=' . $sec['id'] . '&term=' . $gridTerm)) ?>" class="relative block bg-white border border-slate-200 rounded-xl shadow-sm p-5 hover:border-accent-300 hover:shadow-md transition-shadow">
+  <a href="<?= h(url('/headteacher/at_risk.php?section_id=' . $sec['id'] . '&term=' . $gridTerm)) ?>" class="relative block bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-5 hover:border-accent-300 hover:shadow-md transition-shadow">
     <?php if ($count > 0): ?>
     <span class="absolute -top-2 -right-2 min-w-[22px] h-[22px] px-1.5 flex items-center justify-center rounded-full bg-rose-500 text-white text-xs font-semibold shadow-sm"><?= $count ?></span>
     <?php endif; ?>
-    <div class="font-semibold text-slate-800"><?= h($sec['grade_level'] . ' - ' . $sec['section_name']) ?></div>
-    <div class="text-xs text-slate-400 mt-1"><?= h($year['year_label']) ?></div>
+    <div class="font-semibold text-slate-800 dark:text-slate-100"><?= h($sec['grade_level'] . ' - ' . $sec['section_name']) ?></div>
+    <div class="text-xs text-slate-400 dark:text-slate-500 mt-1"><?= h($year['year_label']) ?></div>
     <?php if ($count > 0): ?>
-      <div class="text-xs text-rose-600 font-medium mt-2"><?= $count ?> student<?= $count === 1 ? '' : 's' ?> below 75</div>
+      <div class="text-xs text-rose-600 dark:text-rose-400 font-medium mt-2"><?= $count ?> student<?= $count === 1 ? '' : 's' ?> below 75</div>
     <?php else: ?>
-      <div class="text-xs text-emerald-600 mt-2">No students below 75</div>
+      <div class="text-xs text-emerald-600 dark:text-emerald-400 mt-2">No students below 75</div>
     <?php endif; ?>
   </a>
   <?php endforeach; ?>
   <?php if (!$sections): ?>
-  <div class="text-slate-400 text-sm">No sections found — you don't currently supervise a subject taught anywhere.</div>
+  <div class="text-slate-400 dark:text-slate-500 text-sm">No sections found — you don't currently supervise a subject taught anywhere.</div>
   <?php endif; ?>
 </div>
 <?php render_footer(); ?>

@@ -18,21 +18,21 @@ render_header('My Section');
 ?>
 <div class="grid gap-4 md:grid-cols-2">
   <?php foreach ($sections as $sec): ?>
-  <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
-    <div class="font-semibold text-slate-800 mb-1"><?= h($sec['grade_level'] . ' - ' . $sec['section_name']) ?></div>
-    <div class="text-xs text-slate-400 mb-4"><?= h($year['year_label']) ?></div>
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-6">
+    <div class="font-semibold text-slate-800 dark:text-slate-100 mb-1"><?= h($sec['grade_level'] . ' - ' . $sec['section_name']) ?></div>
+    <div class="text-xs text-slate-400 dark:text-slate-500 mb-4"><?= h($year['year_label']) ?></div>
     <div class="flex flex-wrap gap-2 text-sm">
-      <a href="<?= h(url('/adviser/consolidated.php?section_id=' . $sec['id'])) ?>" class="px-3 py-1.5 rounded-lg bg-accent-50 text-accent-700 hover:bg-accent-100">Consolidated Grades</a>
-      <a href="<?= h(url('/adviser/ranking.php?section_id=' . $sec['id'])) ?>" class="px-3 py-1.5 rounded-lg bg-accent-50 text-accent-700 hover:bg-accent-100">Ranking</a>
-      <a href="<?= h(url('/adviser/at_risk.php?section_id=' . $sec['id'])) ?>" class="px-3 py-1.5 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100">At Risk</a>
-      <a href="<?= h(url('/adviser/card_slips.php?section_id=' . $sec['id'])) ?>" class="px-3 py-1.5 rounded-lg bg-accent-50 text-accent-700 hover:bg-accent-100">Card Slips</a>
-      <a href="<?= h(url('/adviser/remarks.php?section_id=' . $sec['id'])) ?>" class="px-3 py-1.5 rounded-lg bg-accent-50 text-accent-700 hover:bg-accent-100">Remarks</a>
-      <a href="<?= h(url('/adviser/export_csv.php?section_id=' . $sec['id'])) ?>" class="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200">Export CSV</a>
+      <a href="<?= h(url('/adviser/consolidated.php?section_id=' . $sec['id'])) ?>" class="px-3 py-1.5 rounded-lg bg-accent-50 dark:bg-accent-900/30 text-accent-700 dark:text-accent-300 hover:bg-accent-100 dark:hover:bg-accent-900/40">Consolidated Grades</a>
+      <a href="<?= h(url('/adviser/ranking.php?section_id=' . $sec['id'])) ?>" class="px-3 py-1.5 rounded-lg bg-accent-50 dark:bg-accent-900/30 text-accent-700 dark:text-accent-300 hover:bg-accent-100 dark:hover:bg-accent-900/40">Ranking</a>
+      <a href="<?= h(url('/adviser/at_risk.php?section_id=' . $sec['id'])) ?>" class="px-3 py-1.5 rounded-lg bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 hover:bg-rose-100 dark:hover:bg-rose-900/40">At Risk</a>
+      <a href="<?= h(url('/adviser/card_slips.php?section_id=' . $sec['id'])) ?>" class="px-3 py-1.5 rounded-lg bg-accent-50 dark:bg-accent-900/30 text-accent-700 dark:text-accent-300 hover:bg-accent-100 dark:hover:bg-accent-900/40">Card Slips</a>
+      <a href="<?= h(url('/adviser/remarks.php?section_id=' . $sec['id'])) ?>" class="px-3 py-1.5 rounded-lg bg-accent-50 dark:bg-accent-900/30 text-accent-700 dark:text-accent-300 hover:bg-accent-100 dark:hover:bg-accent-900/40">Remarks</a>
+      <a href="<?= h(url('/adviser/export_csv.php?section_id=' . $sec['id'])) ?>" class="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600">Export CSV</a>
     </div>
   </div>
   <?php endforeach; ?>
   <?php if (!$sections): ?>
-  <div class="text-slate-400 text-sm">No section assigned to you for the active school year yet — ask an admin to set you as adviser under Sections.</div>
+  <div class="text-slate-400 dark:text-slate-500 text-sm">No section assigned to you for the active school year yet — ask an admin to set you as adviser under Sections.</div>
   <?php endif; ?>
 </div>
 <?php render_footer(); ?>

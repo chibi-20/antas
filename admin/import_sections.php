@@ -48,36 +48,36 @@ $advisers = $pdo->query("SELECT * FROM users WHERE role = 'subject_teacher' AND 
 
 render_header('Import Sections');
 ?>
-<div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6 mb-6 max-w-xl">
-  <h2 class="text-sm font-semibold text-slate-600 mb-2">Bulk-create sections for a grade level</h2>
-  <p class="text-xs text-slate-400 mb-4">One section name per line (e.g. "Diamond", "Emerald", "Ruby"). All of them will be created under the same school year and grade level. Adviser is optional and, if set, applies to every section created here — you can reassign individual sections afterward under Sections.</p>
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-6 mb-6 max-w-xl">
+  <h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-2">Bulk-create sections for a grade level</h2>
+  <p class="text-xs text-slate-400 dark:text-slate-500 mb-4">One section name per line (e.g. "Diamond", "Emerald", "Ruby"). All of them will be created under the same school year and grade level. Adviser is optional and, if set, applies to every section created here — you can reassign individual sections afterward under Sections.</p>
   <form method="post">
     <?= csrf_field() ?>
-    <label class="block text-sm font-medium text-slate-600 mb-1">School year</label>
-    <select name="school_year_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+    <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">School year</label>
+    <select name="school_year_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
       <?= select_options($schoolYears, 'id', 'year_label', active_school_year()['id'] ?? null) ?>
     </select>
-    <label class="block text-sm font-medium text-slate-600 mb-1">Grade level</label>
-    <select name="grade_level_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+    <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Grade level</label>
+    <select name="grade_level_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
       <option value="">Select…</option>
       <?= select_options($gradeLevels, 'id', 'name', null) ?>
     </select>
-    <label class="block text-sm font-medium text-slate-600 mb-1">Adviser (optional, applies to all)</label>
-    <select name="adviser_id" class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg js-searchable" data-placeholder="Search teachers…">
+    <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Adviser (optional, applies to all)</label>
+    <select name="adviser_id" class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg js-searchable" data-placeholder="Search teachers…">
       <option value="">Unassigned</option>
       <?= select_options($advisers, 'id', 'full_name', null) ?>
     </select>
-    <label class="block text-sm font-medium text-slate-600 mb-1">Section names (one per line)</label>
-    <textarea name="section_names" required rows="6" placeholder="Diamond&#10;Emerald&#10;Ruby" class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg font-mono text-sm"></textarea>
+    <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Section names (one per line)</label>
+    <textarea name="section_names" required rows="6" placeholder="Diamond&#10;Emerald&#10;Ruby" class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg font-mono text-sm"></textarea>
     <button type="submit" class="bg-accent-600 hover:bg-accent-700 text-white font-medium px-4 py-2 rounded-lg text-sm">Create Sections</button>
-    <a href="<?= h(url('/admin/sections.php')) ?>" class="px-4 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-100">Back to Sections</a>
+    <a href="<?= h(url('/admin/sections.php')) ?>" class="px-4 py-2 rounded-lg text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">Back to Sections</a>
   </form>
 </div>
 
 <?php if ($results && $results['skipped']): ?>
-<div class="bg-white border border-amber-200 rounded-xl shadow-sm p-6 max-w-xl">
-  <h2 class="text-sm font-semibold text-amber-700 mb-3">Skipped (<?= count($results['skipped']) ?>)</h2>
-  <ul class="text-sm text-slate-600 space-y-1 list-disc list-inside">
+<div class="bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-800 rounded-xl shadow-sm p-6 max-w-xl">
+  <h2 class="text-sm font-semibold text-amber-700 dark:text-amber-300 mb-3">Skipped (<?= count($results['skipped']) ?>)</h2>
+  <ul class="text-sm text-slate-600 dark:text-slate-300 space-y-1 list-disc list-inside">
     <?php foreach ($results['skipped'] as $reason): ?>
       <li><?= h($reason) ?></li>
     <?php endforeach; ?>

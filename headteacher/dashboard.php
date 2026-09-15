@@ -34,10 +34,10 @@ if ($teacherId && $subjectId) {
 
     render_header($assignments[0]['teacher_name'] . ' · ' . $assignments[0]['subject_name']);
     ?>
-    <a href="<?= h(url('/headteacher/dashboard.php')) ?>" class="inline-block mb-4 text-sm text-accent-600 hover:underline">&larr; Back to Teachers</a>
-    <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+    <a href="<?= h(url('/headteacher/dashboard.php')) ?>" class="inline-block mb-4 text-sm text-accent-600 dark:text-accent-400 hover:underline">&larr; Back to Teachers</a>
+    <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden">
       <table class="w-full text-sm">
-        <thead class="bg-slate-50 text-slate-500 text-xs uppercase">
+        <thead class="bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 text-xs uppercase">
           <tr>
             <th class="text-left px-4 py-3">Section</th>
             <th class="text-left px-4 py-3">Term 1</th>
@@ -45,7 +45,7 @@ if ($teacherId && $subjectId) {
             <th class="text-left px-4 py-3">Term 3</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-slate-100">
+        <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
           <?php foreach ($assignments as $a):
               $statusStmt->execute([$a['id']]);
               $statuses = array_column($statusStmt->fetchAll(), 'status', 'term');
@@ -103,30 +103,30 @@ echo ht_tab_nav('review');
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
   <?php
   $htStatCard = function (string $label, int $value, string $icon, string $colorClasses): void {
-      echo '<div class="bg-white border border-slate-200 rounded-xl shadow-sm p-5 flex items-center gap-4">
+      echo '<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-5 flex items-center gap-4">
         <div class="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ' . $colorClasses . '">' . icon_svg($icon, 'w-6 h-6') . '</div>
-        <div><div class="text-2xl font-semibold text-slate-800">' . $value . '</div><div class="text-xs text-slate-500">' . h($label) . '</div></div>
+        <div><div class="text-2xl font-semibold text-slate-800 dark:text-slate-100">' . $value . '</div><div class="text-xs text-slate-500 dark:text-slate-400">' . h($label) . '</div></div>
       </div>';
   };
-  $htStatCard('Pending Review', $pendingCount, 'clipboard', 'bg-amber-100 text-amber-600');
-  $htStatCard('Reviewed', $reviewedCount, 'check', 'bg-blue-100 text-blue-600');
-  $htStatCard('Teachers Supervised', $teacherCount, 'teachers', 'bg-emerald-100 text-emerald-600');
-  $htStatCard('Sections For Review', $sectionsForReview, 'sections', 'bg-violet-100 text-violet-600');
+  $htStatCard('Pending Review', $pendingCount, 'clipboard', 'bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400');
+  $htStatCard('Reviewed', $reviewedCount, 'check', 'bg-blue-100 dark:bg-blue-900/40 text-blue-600');
+  $htStatCard('Teachers Supervised', $teacherCount, 'teachers', 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400');
+  $htStatCard('Sections For Review', $sectionsForReview, 'sections', 'bg-violet-100 dark:bg-violet-900/40 text-violet-600');
   ?>
 </div>
 
 <div class="flex flex-col sm:flex-row gap-3 mb-6">
   <div class="relative flex-1">
-    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"><?= icon_svg('search', 'w-4 h-4') ?></span>
-    <input type="text" id="ht-search" placeholder="Search by teacher or subject…" class="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-500">
+    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"><?= icon_svg('search', 'w-4 h-4') ?></span>
+    <input type="text" id="ht-search" placeholder="Search by teacher or subject…" class="w-full pl-9 pr-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-500">
   </div>
-  <select id="ht-status-filter" class="px-3 py-2 text-sm border border-slate-300 rounded-lg">
+  <select id="ht-status-filter" class="px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg">
     <option value="">All Statuses</option>
     <option value="submitted_for_review">Awaiting Review</option>
     <option value="published">Published</option>
     <option value="not_started">Not Started</option>
   </select>
-  <select id="ht-subject-filter" class="px-3 py-2 text-sm border border-slate-300 rounded-lg">
+  <select id="ht-subject-filter" class="px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg">
     <option value="">All Subjects</option>
     <?php foreach ($subjectOptions as $sid => $sname): ?>
       <option value="<?= (int) $sid ?>"><?= h($sname) ?></option>
@@ -140,26 +140,26 @@ echo ht_tab_nav('review');
       $teacherIdForCard = (int) $g['teacher_id'];
   ?>
   <a href="<?= h(url('/headteacher/dashboard.php?teacher_id=' . $g['teacher_id'] . '&subject_id=' . $g['subject_id'])) ?>"
-     class="ht-card block bg-white border border-slate-200 rounded-xl shadow-sm p-6 hover:border-accent-300 hover:shadow-md transition-shadow"
+     class="ht-card block bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-6 hover:border-accent-300 hover:shadow-md transition-shadow"
      data-search="<?= h($g['teacher_name'] . ' ' . $g['subject_name']) ?>" data-status="<?= h($cardStatus) ?>" data-subject-id="<?= (int) $g['subject_id'] ?>">
     <div class="flex items-start justify-between mb-4">
       <div class="flex items-center gap-3">
         <div class="w-11 h-11 rounded-full <?= avatar_color($teacherIdForCard) ?> text-white flex items-center justify-center text-sm font-semibold flex-shrink-0"><?= h(avatar_initials($g['teacher_name'])) ?></div>
         <div>
-          <div class="font-semibold text-slate-800"><?= h($g['teacher_name']) ?></div>
-          <div class="text-xs font-medium text-accent-600"><?= h($g['subject_name']) ?></div>
+          <div class="font-semibold text-slate-800 dark:text-slate-100"><?= h($g['teacher_name']) ?></div>
+          <div class="text-xs font-medium text-accent-600 dark:text-accent-400"><?= h($g['subject_name']) ?></div>
         </div>
       </div>
       <?= status_badge($cardStatus) ?>
     </div>
     <div class="grid grid-cols-2 gap-3 mb-4">
-      <div class="bg-slate-50 rounded-lg px-3 py-2 flex items-center gap-2">
-        <?= icon_svg('sections', 'w-4 h-4 text-slate-400 flex-shrink-0') ?>
-        <div class="text-xs"><span class="font-semibold text-slate-700"><?= (int) $g['section_count'] ?></span> <span class="text-slate-500">Section<?= (int) $g['section_count'] === 1 ? '' : 's' ?></span></div>
+      <div class="bg-slate-50 dark:bg-slate-900 rounded-lg px-3 py-2 flex items-center gap-2">
+        <?= icon_svg('sections', 'w-4 h-4 text-slate-400 dark:text-slate-500 flex-shrink-0') ?>
+        <div class="text-xs"><span class="font-semibold text-slate-700 dark:text-slate-200"><?= (int) $g['section_count'] ?></span> <span class="text-slate-500 dark:text-slate-400">Section<?= (int) $g['section_count'] === 1 ? '' : 's' ?></span></div>
       </div>
-      <div class="bg-slate-50 rounded-lg px-3 py-2 flex items-center gap-2">
-        <?= icon_svg('calendar', 'w-4 h-4 text-slate-400 flex-shrink-0') ?>
-        <div class="text-xs text-slate-500">
+      <div class="bg-slate-50 dark:bg-slate-900 rounded-lg px-3 py-2 flex items-center gap-2">
+        <?= icon_svg('calendar', 'w-4 h-4 text-slate-400 dark:text-slate-500 flex-shrink-0') ?>
+        <div class="text-xs text-slate-500 dark:text-slate-400">
           <?php if ($g['latest_submission']): ?>
             Submitted <?= h(date('M j, Y', strtotime($g['latest_submission']))) ?>
           <?php else: ?>
@@ -168,13 +168,13 @@ echo ht_tab_nav('review');
         </div>
       </div>
     </div>
-    <div class="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-accent-50 text-accent-700 text-sm font-medium">
+    <div class="flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-accent-50 dark:bg-accent-900/30 text-accent-700 dark:text-accent-300 text-sm font-medium">
       View & Review Submission <?= icon_svg('arrow-right', 'w-4 h-4') ?>
     </div>
   </a>
   <?php endforeach; ?>
   <?php if (!$groups): ?>
-  <div class="text-slate-400 text-sm">No subjects assigned to you for supervision yet.</div>
+  <div class="text-slate-400 dark:text-slate-500 text-sm">No subjects assigned to you for supervision yet.</div>
   <?php endif; ?>
 </div>
 

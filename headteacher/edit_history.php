@@ -87,40 +87,40 @@ $filterQuery = array_filter([
 render_header('Edit History', 'Grades changed as a result of an approved post-publish edit request.');
 echo ht_tab_nav('edit_history');
 ?>
-<div class="bg-white border border-slate-200 rounded-xl shadow-sm p-4 mb-6">
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-4 mb-6">
   <form method="get" class="flex flex-wrap items-end gap-3">
     <div>
-      <label class="block text-xs font-medium text-slate-500 mb-1">Section</label>
-      <select name="section_id" class="px-3 py-1.5 border border-slate-300 rounded-lg text-sm">
+      <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Section</label>
+      <select name="section_id" class="px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm">
         <option value="0">All sections</option>
         <?= select_options(array_map(fn($s) => ['id' => $s['id'], 'label' => $s['grade_level'] . ' - ' . $s['section_name']], $sections), 'id', 'label', $sectionId ?: null) ?>
       </select>
     </div>
     <div>
-      <label class="block text-xs font-medium text-slate-500 mb-1">Subject</label>
-      <select name="subject_id" class="px-3 py-1.5 border border-slate-300 rounded-lg text-sm">
+      <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Subject</label>
+      <select name="subject_id" class="px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm">
         <option value="0">All subjects</option>
         <?= select_options($subjects, 'id', 'subject_name', $subjectId ?: null) ?>
       </select>
     </div>
     <div>
-      <label class="block text-xs font-medium text-slate-500 mb-1">From</label>
-      <input type="date" name="date_from" value="<?= h($dateFrom) ?>" class="px-3 py-1.5 border border-slate-300 rounded-lg text-sm">
+      <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">From</label>
+      <input type="date" name="date_from" value="<?= h($dateFrom) ?>" class="px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm">
     </div>
     <div>
-      <label class="block text-xs font-medium text-slate-500 mb-1">To</label>
-      <input type="date" name="date_to" value="<?= h($dateTo) ?>" class="px-3 py-1.5 border border-slate-300 rounded-lg text-sm">
+      <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">To</label>
+      <input type="date" name="date_to" value="<?= h($dateTo) ?>" class="px-3 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm">
     </div>
     <button type="submit" class="px-4 py-1.5 rounded-lg text-sm bg-accent-600 hover:bg-accent-700 text-white font-medium">Filter</button>
     <?php if ($hasFilters): ?>
-      <a href="<?= h(url('/headteacher/edit_history.php')) ?>" class="px-4 py-1.5 rounded-lg text-sm text-slate-500 hover:bg-slate-100">Clear</a>
+      <a href="<?= h(url('/headteacher/edit_history.php')) ?>" class="px-4 py-1.5 rounded-lg text-sm text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700">Clear</a>
     <?php endif; ?>
   </form>
 </div>
 
-<div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden">
   <table class="w-full text-sm">
-    <thead class="bg-slate-50 text-slate-500 text-xs uppercase">
+    <thead class="bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 text-xs uppercase">
       <tr>
         <th class="text-left px-4 py-3">Student</th>
         <th class="text-left px-4 py-3">Subject</th>
@@ -132,40 +132,40 @@ echo ht_tab_nav('edit_history');
         <th class="text-left px-4 py-3">Changed</th>
       </tr>
     </thead>
-    <tbody class="divide-y divide-slate-100">
+    <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
       <?php foreach ($history as $h): ?>
       <tr>
         <td class="px-4 py-3 font-medium"><?= h($h['student_name']) ?></td>
-        <td class="px-4 py-3 text-slate-600"><?= h($h['subject_name']) ?></td>
-        <td class="px-4 py-3 text-slate-600"><?= h($h['grade_level'] . ' - ' . $h['section_name']) ?></td>
-        <td class="px-4 py-3 text-slate-600">Term <?= (int) $h['term'] ?></td>
+        <td class="px-4 py-3 text-slate-600 dark:text-slate-300"><?= h($h['subject_name']) ?></td>
+        <td class="px-4 py-3 text-slate-600 dark:text-slate-300"><?= h($h['grade_level'] . ' - ' . $h['section_name']) ?></td>
+        <td class="px-4 py-3 text-slate-600 dark:text-slate-300">Term <?= (int) $h['term'] ?></td>
         <td class="px-4 py-3">
-          <span class="<?= $h['old_transmuted_grade'] !== null ? grade_display_class((float) $h['old_transmuted_grade']) : 'text-slate-400' ?>"><?= $h['old_transmuted_grade'] !== null ? h($h['old_transmuted_grade']) : '—' ?></span>
-          <?= icon_svg('arrow-right', 'w-3 h-3 inline text-slate-400') ?>
-          <span class="font-semibold <?= $h['new_transmuted_grade'] !== null ? (grade_display_class((float) $h['new_transmuted_grade']) ?: 'text-accent-700') : 'text-slate-400' ?>"><?= $h['new_transmuted_grade'] !== null ? h($h['new_transmuted_grade']) : '—' ?></span>
+          <span class="<?= $h['old_transmuted_grade'] !== null ? grade_display_class((float) $h['old_transmuted_grade']) : 'text-slate-400 dark:text-slate-500' ?>"><?= $h['old_transmuted_grade'] !== null ? h($h['old_transmuted_grade']) : '—' ?></span>
+          <?= icon_svg('arrow-right', 'w-3 h-3 inline text-slate-400 dark:text-slate-500') ?>
+          <span class="font-semibold <?= $h['new_transmuted_grade'] !== null ? (grade_display_class((float) $h['new_transmuted_grade']) ?: 'text-accent-700 dark:text-accent-300') : 'text-slate-400 dark:text-slate-500' ?>"><?= $h['new_transmuted_grade'] !== null ? h($h['new_transmuted_grade']) : '—' ?></span>
         </td>
-        <td class="px-4 py-3 text-slate-600"><?= h($h['requested_by_name']) ?></td>
-        <td class="px-4 py-3 text-slate-500 max-w-xs"><?= h($h['reason']) ?></td>
-        <td class="px-4 py-3 text-slate-400 whitespace-nowrap"><?= h($h['reviewed_at'] ? date('M j, Y', strtotime($h['reviewed_at'])) : '—') ?></td>
+        <td class="px-4 py-3 text-slate-600 dark:text-slate-300"><?= h($h['requested_by_name']) ?></td>
+        <td class="px-4 py-3 text-slate-500 dark:text-slate-400 max-w-xs"><?= h($h['reason']) ?></td>
+        <td class="px-4 py-3 text-slate-400 dark:text-slate-500 whitespace-nowrap"><?= h($h['reviewed_at'] ? date('M j, Y', strtotime($h['reviewed_at'])) : '—') ?></td>
       </tr>
       <?php endforeach; ?>
       <?php if (!$history): ?>
-      <tr><td colspan="8" class="px-4 py-6 text-center text-slate-400"><?= $hasFilters ? 'No grade changes match these filters.' : 'No grade changes from approved edit requests yet.' ?></td></tr>
+      <tr><td colspan="8" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500"><?= $hasFilters ? 'No grade changes match these filters.' : 'No grade changes from approved edit requests yet.' ?></td></tr>
       <?php endif; ?>
     </tbody>
   </table>
 </div>
 
 <?php if ($totalCount > 0): ?>
-<div class="flex items-center justify-between mt-4 text-sm text-slate-500">
+<div class="flex items-center justify-between mt-4 text-sm text-slate-500 dark:text-slate-400">
   <div>Showing <?= $offset + 1 ?>&ndash;<?= min($offset + $perPage, $totalCount) ?> of <?= $totalCount ?></div>
   <div class="flex gap-1">
     <?php if ($page > 1): ?>
-      <a href="<?= h(url('/headteacher/edit_history.php?' . http_build_query($filterQuery + ['page' => $page - 1]))) ?>" class="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50">Previous</a>
+      <a href="<?= h(url('/headteacher/edit_history.php?' . http_build_query($filterQuery + ['page' => $page - 1]))) ?>" class="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700">Previous</a>
     <?php endif; ?>
     <span class="px-3 py-1.5">Page <?= $page ?> of <?= $totalPages ?></span>
     <?php if ($page < $totalPages): ?>
-      <a href="<?= h(url('/headteacher/edit_history.php?' . http_build_query($filterQuery + ['page' => $page + 1]))) ?>" class="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50">Next</a>
+      <a href="<?= h(url('/headteacher/edit_history.php?' . http_build_query($filterQuery + ['page' => $page + 1]))) ?>" class="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700">Next</a>
     <?php endif; ?>
   </div>
 </div>

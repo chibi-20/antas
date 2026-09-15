@@ -112,80 +112,80 @@ if (isset($_GET['edit'])) {
 
 render_header('Students');
 ?>
-<div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6 mb-6 max-w-lg">
-  <h2 class="text-sm font-semibold text-slate-600 mb-4"><?= $editing ? 'Edit Student' : 'Add Student' ?></h2>
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-6 mb-6 max-w-lg">
+  <h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-4"><?= $editing ? 'Edit Student' : 'Add Student' ?></h2>
   <form method="post">
     <?= csrf_field() ?>
     <input type="hidden" name="action" value="<?= $editing ? 'update' : 'create' ?>">
     <?php if ($editing): ?><input type="hidden" name="id" value="<?= (int) $editing['id'] ?>"><?php endif; ?>
     <input type="hidden" name="section_filter" value="<?= h($filterSectionId) ?>">
-    <label class="block text-sm font-medium text-slate-600 mb-1">School year</label>
-    <select name="school_year_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+    <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">School year</label>
+    <select name="school_year_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
       <?= select_options($schoolYears, 'id', 'year_label', $editing['school_year_id'] ?? (active_school_year()['id'] ?? null)) ?>
     </select>
-    <label class="block text-sm font-medium text-slate-600 mb-1">Section</label>
+    <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Section</label>
     <?php $currentSectionId = (string) ($editing['section_id'] ?? $filterSectionId ?: ''); ?>
-    <select name="section_id" required data-special-target="student-major-field" class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+    <select name="section_id" required data-special-target="student-major-field" class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
       <?php foreach ($sectionLabels as $sl): ?>
         <option value="<?= h($sl['id']) ?>" data-special="<?= $sl['is_special_program'] ?>" <?= (string) $sl['id'] === $currentSectionId ? 'selected' : '' ?>><?= h($sl['label']) ?></option>
       <?php endforeach; ?>
     </select>
     <div id="student-major-field" hidden class="mb-4">
-      <label class="block text-sm font-medium text-slate-600 mb-1">Major</label>
-      <select name="major_id" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+      <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Major</label>
+      <select name="major_id" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
         <option value="">Select a major…</option>
         <?= select_options($majors, 'id', 'major_name', $editing['major_id'] ?? null) ?>
       </select>
     </div>
     <div class="grid grid-cols-2 gap-3 mb-4">
-      <div><label class="block text-xs font-medium text-slate-500 mb-1">LRN (optional)</label><input type="text" name="lrn" maxlength="20" value="<?= h($editing['lrn'] ?? '') ?>" class="w-full px-3 py-2 border border-slate-300 rounded-lg"></div>
-      <div><label class="block text-xs font-medium text-slate-500 mb-1">Sex</label>
-        <select name="sex" required class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+      <div><label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">LRN (optional)</label><input type="text" name="lrn" maxlength="20" value="<?= h($editing['lrn'] ?? '') ?>" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg"></div>
+      <div><label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Sex</label>
+        <select name="sex" required class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
           <option value="M" <?= ($editing['sex'] ?? '') === 'M' ? 'selected' : '' ?>>Male</option>
           <option value="F" <?= ($editing['sex'] ?? '') === 'F' ? 'selected' : '' ?>>Female</option>
         </select>
       </div>
     </div>
-    <label class="block text-sm font-medium text-slate-600 mb-1">Full name</label>
-    <input type="text" name="full_name" required value="<?= h($editing['full_name'] ?? '') ?>" class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
-    <label class="block text-sm font-medium text-slate-600 mb-1">Birthdate (optional)</label>
-    <input type="date" name="birthdate" value="<?= h($editing['birthdate'] ?? '') ?>" class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+    <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Full name</label>
+    <input type="text" name="full_name" required value="<?= h($editing['full_name'] ?? '') ?>" class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
+    <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Birthdate (optional)</label>
+    <input type="date" name="birthdate" value="<?= h($editing['birthdate'] ?? '') ?>" class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
     <div class="flex gap-2">
       <button type="submit" class="bg-accent-600 hover:bg-accent-700 text-white font-medium px-4 py-2 rounded-lg text-sm"><?= $editing ? 'Save Changes' : 'Add' ?></button>
-      <?php if ($editing): ?><a href="<?= h(url('/admin/students.php')) ?>" class="px-4 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-100">Cancel</a><?php endif; ?>
+      <?php if ($editing): ?><a href="<?= h(url('/admin/students.php')) ?>" class="px-4 py-2 rounded-lg text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">Cancel</a><?php endif; ?>
     </div>
   </form>
 </div>
 
 <div class="flex items-center justify-between mb-4">
   <form method="get" class="flex items-center gap-2 text-sm">
-    <label class="text-slate-500">Section:</label>
-    <select name="section_id" onchange="this.form.submit()" class="px-3 py-2 border border-slate-300 rounded-lg">
+    <label class="text-slate-500 dark:text-slate-400">Section:</label>
+    <select name="section_id" onchange="this.form.submit()" class="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
       <option value="">Select a section…</option>
       <?= select_options($sectionLabels, 'id', 'label', $filterSectionId ?: null) ?>
     </select>
   </form>
-  <a href="<?= h(url('/admin/import_students.php')) ?>" class="px-3 py-1.5 rounded-lg text-sm bg-slate-100 text-slate-600 hover:bg-slate-200">Import Students</a>
+  <a href="<?= h(url('/admin/import_students.php')) ?>" class="px-3 py-1.5 rounded-lg text-sm bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600">Import Students</a>
 </div>
 
-<div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden">
   <table class="w-full text-sm">
-    <thead class="bg-slate-50 text-slate-500 text-xs uppercase">
+    <thead class="bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 text-xs uppercase">
       <tr>
         <th class="text-left px-4 py-3">LRN</th><th class="text-left px-4 py-3">Name</th><th class="text-left px-4 py-3">Sex</th>
         <?php if ($filterSection && $filterSection['is_special_program']): ?><th class="text-left px-4 py-3">Major</th><?php endif; ?>
         <th class="text-left px-4 py-3">Status</th><th class="px-4 py-3"></th>
       </tr>
     </thead>
-    <tbody class="divide-y divide-slate-100">
+    <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
       <?php $lastSex = null; foreach ($students as $st): ?>
       <?php if ($st['sex'] !== $lastSex): $lastSex = $st['sex']; ?>
-      <tr><td colspan="99" class="px-4 py-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide bg-slate-50"><?= $st['sex'] === 'M' ? 'Male' : 'Female' ?></td></tr>
+      <tr><td colspan="99" class="px-4 py-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide bg-slate-50 dark:bg-slate-900"><?= $st['sex'] === 'M' ? 'Male' : 'Female' ?></td></tr>
       <?php endif; ?>
       <tr>
-        <td class="px-4 py-3 text-slate-600"><?= $st['lrn'] !== null ? h($st['lrn']) : '<span class="text-slate-300">—</span>' ?></td>
+        <td class="px-4 py-3 text-slate-600 dark:text-slate-300"><?= $st['lrn'] !== null ? h($st['lrn']) : '<span class="text-slate-300 dark:text-slate-600">—</span>' ?></td>
         <td class="px-4 py-3 font-medium"><?= h($st['full_name']) ?></td>
-        <td class="px-4 py-3 text-slate-600"><?= $st['sex'] === 'M' ? 'Male' : 'Female' ?></td>
+        <td class="px-4 py-3 text-slate-600 dark:text-slate-300"><?= $st['sex'] === 'M' ? 'Male' : 'Female' ?></td>
         <?php if ($filterSection && $filterSection['is_special_program']): ?>
         <td class="px-4 py-3">
           <form method="post">
@@ -193,28 +193,28 @@ render_header('Students');
             <input type="hidden" name="action" value="quick_set_major">
             <input type="hidden" name="id" value="<?= (int) $st['id'] ?>">
             <input type="hidden" name="section_filter" value="<?= h($filterSectionId) ?>">
-            <select name="major_id" onchange="this.form.submit()" class="px-2 py-1.5 border border-slate-300 rounded-lg text-sm <?= !$st['major_id'] ? 'text-amber-600 border-amber-300' : '' ?>">
+            <select name="major_id" onchange="this.form.submit()" class="px-2 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm <?= !$st['major_id'] ? 'text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700' : '' ?>">
               <option value="">Unassigned</option>
               <?= select_options($majors, 'id', 'major_name', $st['major_id']) ?>
             </select>
           </form>
         </td>
         <?php endif; ?>
-        <td class="px-4 py-3"><?= $st['is_active'] ? '<span class="text-emerald-600">Active</span>' : '<span class="text-slate-400">Inactive</span>' ?></td>
+        <td class="px-4 py-3"><?= $st['is_active'] ? '<span class="text-emerald-600 dark:text-emerald-400">Active</span>' : '<span class="text-slate-400 dark:text-slate-500">Inactive</span>' ?></td>
         <td class="px-4 py-3 text-right space-x-2">
-          <a href="<?= h(url('/admin/students.php?edit=' . $st['id'] . '&section_id=' . $filterSectionId)) ?>" class="text-accent-600 hover:underline">Edit</a>
+          <a href="<?= h(url('/admin/students.php?edit=' . $st['id'] . '&section_id=' . $filterSectionId)) ?>" class="text-accent-600 dark:text-accent-400 hover:underline">Edit</a>
           <form method="post" class="inline">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="toggle_active">
             <input type="hidden" name="id" value="<?= (int) $st['id'] ?>">
             <input type="hidden" name="section_filter" value="<?= h($filterSectionId) ?>">
-            <button type="submit" class="text-slate-500 hover:underline"><?= $st['is_active'] ? 'Deactivate' : 'Activate' ?></button>
+            <button type="submit" class="text-slate-500 dark:text-slate-400 hover:underline"><?= $st['is_active'] ? 'Deactivate' : 'Activate' ?></button>
           </form>
         </td>
       </tr>
       <?php endforeach; ?>
-      <?php if ($filterSectionId && !$students): ?><tr><td colspan="6" class="px-4 py-6 text-center text-slate-400">No students in this section yet.</td></tr><?php endif; ?>
-      <?php if (!$filterSectionId): ?><tr><td colspan="5" class="px-4 py-6 text-center text-slate-400">Select a section above to view its students.</td></tr><?php endif; ?>
+      <?php if ($filterSectionId && !$students): ?><tr><td colspan="6" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500">No students in this section yet.</td></tr><?php endif; ?>
+      <?php if (!$filterSectionId): ?><tr><td colspan="5" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500">Select a section above to view its students.</td></tr><?php endif; ?>
     </tbody>
   </table>
 </div>

@@ -82,17 +82,17 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
 <form method="get" class="flex gap-1 mb-6">
   <input type="hidden" name="section_id" value="<?= $sectionId ?>">
   <?php for ($t = 1; $t <= 3; $t++): ?>
-    <button type="submit" name="term" value="<?= $t ?>" class="px-3 py-1.5 rounded-lg text-sm <?= $view === (string) $t ? 'bg-accent-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50' ?>">Term <?= $t ?></button>
+    <button type="submit" name="term" value="<?= $t ?>" class="px-3 py-1.5 rounded-lg text-sm <?= $view === (string) $t ? 'bg-accent-600 text-white' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700' ?>">Term <?= $t ?></button>
   <?php endfor; ?>
-  <button type="submit" name="term" value="overall" class="px-3 py-1.5 rounded-lg text-sm <?= $isOverall ? 'bg-accent-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50' ?>">Overall</button>
+  <button type="submit" name="term" value="overall" class="px-3 py-1.5 rounded-lg text-sm <?= $isOverall ? 'bg-accent-600 text-white' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700' ?>">Overall</button>
 </form>
 
-<div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden max-w-3xl">
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden max-w-3xl">
   <table class="w-full text-sm">
-    <thead class="bg-slate-50 text-slate-500 text-xs uppercase">
+    <thead class="bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 text-xs uppercase">
       <tr><th class="text-left px-4 py-3">Rank</th><th class="text-left px-4 py-3">Student</th><th class="text-left px-4 py-3">General Average</th><th class="text-left px-4 py-3">Whole Grade</th><th class="text-left px-4 py-3">Honor</th></tr>
     </thead>
-    <tbody class="divide-y divide-slate-100">
+    <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
       <?php foreach ($ranking as $r):
           $wholeGrade = grade_whole($r['average']);
           // Academic Excellence eligibility is checked against the rounded whole-number
@@ -104,21 +104,21 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
           $honor = honor_classification($wholeGrade !== null ? (float) $wholeGrade : null);
       ?>
       <tr>
-        <td class="px-4 py-3 font-semibold <?= (int) $r['rank_in_section'] <= 3 ? 'text-accent-700' : 'text-slate-600' ?>">#<?= (int) $r['rank_in_section'] ?></td>
+        <td class="px-4 py-3 font-semibold <?= (int) $r['rank_in_section'] <= 3 ? 'text-accent-700 dark:text-accent-300' : 'text-slate-600 dark:text-slate-300' ?>">#<?= (int) $r['rank_in_section'] ?></td>
         <td class="px-4 py-3 font-medium"><?= h($r['full_name']) ?></td>
         <td class="px-4 py-3 <?= $r['average'] !== null ? grade_display_class((float) $r['average']) : '' ?>"><?= h($r['average']) ?></td>
         <td class="px-4 py-3 font-medium <?= $wholeGrade !== null ? grade_display_class((float) $wholeGrade) : '' ?>"><?= $wholeGrade !== null ? h($wholeGrade) : '—' ?></td>
         <td class="px-4 py-3">
           <?php if ($honor): ?>
-            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700"><?= icon_svg('star', 'w-3 h-3') ?> <?= h($honor) ?></span>
+            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300"><?= icon_svg('star', 'w-3 h-3') ?> <?= h($honor) ?></span>
           <?php else: ?>
-            <span class="text-slate-300">—</span>
+            <span class="text-slate-300 dark:text-slate-600">—</span>
           <?php endif; ?>
         </td>
       </tr>
       <?php endforeach; ?>
       <?php if (!$ranking): ?>
-      <tr><td colspan="5" class="px-4 py-6 text-center text-slate-400"><?= $isOverall
+      <tr><td colspan="5" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500"><?= $isOverall
           ? 'Overall ranking will appear once at least 2 of the 3 terms have a General Average for a student.'
           : 'No published subjects yet for this term — ranking will appear once at least one subject is published.' ?></td></tr>
       <?php endif; ?>

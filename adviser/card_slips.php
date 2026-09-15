@@ -129,18 +129,18 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
       <input type="hidden" name="section_id" value="<?= $sectionId ?>">
       <input type="hidden" name="mode" value="<?= h($mode) ?>">
       <?php for ($t = 1; $t <= 3; $t++): ?>
-        <button type="submit" name="term" value="<?= $t ?>" class="px-3 py-1.5 rounded-lg text-sm <?= $t === $term ? 'bg-accent-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50' ?>">Term <?= $t ?></button>
+        <button type="submit" name="term" value="<?= $t ?>" class="px-3 py-1.5 rounded-lg text-sm <?= $t === $term ? 'bg-accent-600 text-white' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700' ?>">Term <?= $t ?></button>
       <?php endfor; ?>
     </form>
     <form method="get" class="flex gap-1">
       <input type="hidden" name="section_id" value="<?= $sectionId ?>">
       <input type="hidden" name="term" value="<?= $term ?>">
-      <button type="submit" name="mode" value="4up" class="px-3 py-1.5 rounded-lg text-sm <?= $mode === '4up' ? 'bg-accent-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50' ?>">4 per sheet</button>
-      <button type="submit" name="mode" value="2up" class="px-3 py-1.5 rounded-lg text-sm <?= $mode === '2up' ? 'bg-accent-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50' ?>">2 per sheet (with remarks)</button>
+      <button type="submit" name="mode" value="4up" class="px-3 py-1.5 rounded-lg text-sm <?= $mode === '4up' ? 'bg-accent-600 text-white' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700' ?>">4 per sheet</button>
+      <button type="submit" name="mode" value="2up" class="px-3 py-1.5 rounded-lg text-sm <?= $mode === '2up' ? 'bg-accent-600 text-white' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700' ?>">2 per sheet (with remarks)</button>
     </form>
   </div>
   <div class="flex gap-2">
-    <button id="download-pdf" type="button" class="px-4 py-2 rounded-lg text-sm bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 font-medium flex items-center gap-1.5"><?= icon_svg('download', 'w-4 h-4') ?> Download PDF</button>
+    <button id="download-pdf" type="button" class="px-4 py-2 rounded-lg text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 font-medium flex items-center gap-1.5"><?= icon_svg('download', 'w-4 h-4') ?> Download PDF</button>
     <button onclick="window.print()" class="px-4 py-2 rounded-lg text-sm bg-accent-600 hover:bg-accent-700 text-white font-medium">Print</button>
   </div>
 </div>
@@ -176,7 +176,7 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
 <?php endif; ?>
 
 <?php if (!$data['students']): ?>
-<p class="text-slate-400 text-sm no-print">No students in this section yet.</p>
+<p class="text-slate-400 dark:text-slate-500 text-sm no-print">No students in this section yet.</p>
 <?php endif; ?>
 <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>

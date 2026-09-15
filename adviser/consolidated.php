@@ -25,17 +25,17 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
   <form method="get" class="flex gap-1">
     <input type="hidden" name="section_id" value="<?= $sectionId ?>">
     <?php for ($t = 1; $t <= 3; $t++): ?>
-      <button type="submit" name="term" value="<?= $t ?>" class="px-3 py-1.5 rounded-lg text-sm <?= $t === $term ? 'bg-accent-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50' ?>">Term <?= $t ?></button>
+      <button type="submit" name="term" value="<?= $t ?>" class="px-3 py-1.5 rounded-lg text-sm <?= $t === $term ? 'bg-accent-600 text-white' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700' ?>">Term <?= $t ?></button>
     <?php endfor; ?>
   </form>
   <div class="flex gap-2">
-    <button id="download-pdf" type="button" class="px-3 py-1.5 rounded-lg text-sm bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 flex items-center gap-1.5"><?= icon_svg('download', 'w-4 h-4') ?> Download PDF</button>
-    <a href="<?= h(url('/adviser/export_csv.php?section_id=' . $sectionId . '&term=' . $term)) ?>" class="px-3 py-1.5 rounded-lg text-sm bg-slate-100 text-slate-600 hover:bg-slate-200">Export CSV</a>
+    <button id="download-pdf" type="button" class="px-3 py-1.5 rounded-lg text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-1.5"><?= icon_svg('download', 'w-4 h-4') ?> Download PDF</button>
+    <a href="<?= h(url('/adviser/export_csv.php?section_id=' . $sectionId . '&term=' . $term)) ?>" class="px-3 py-1.5 rounded-lg text-sm bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600">Export CSV</a>
   </div>
 </div>
 
 <?php if ($pendingCount > 0): ?>
-<div class="mb-6 px-4 py-3 rounded-lg text-sm bg-amber-50 text-amber-700 border border-amber-200">
+<div class="mb-6 px-4 py-3 rounded-lg text-sm bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
   <?= $pendingCount ?> of <?= count($countableSubjects) ?> subject(s) not yet published by the Head Teacher — those columns show "Pending" and are excluded from the General Average until published.
 </div>
 <?php endif; ?>
@@ -43,7 +43,7 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
 
 <div id="grid-scroll-top" class="overflow-x-auto mb-1"><div id="grid-scroll-spacer" style="height:1px;"></div></div>
 <div id="pdf-capture-root">
-  <div id="pdf-letterhead" class="hidden text-center leading-tight mb-4 text-slate-800">
+  <div id="pdf-letterhead" class="hidden text-center leading-tight mb-4 text-slate-800 dark:text-slate-100">
     <div>Republic of the Philippines</div>
     <div>Department of Education</div>
     <div>Region IV-A CALABARZON</div>
@@ -52,14 +52,14 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
     <div>School Year <?= h($year['year_label'] ?? '') ?></div>
     <div class="font-semibold mt-1">CONSOLIDATION OF GRADES FOR <?= h(strtoupper($section['grade_level'] . ' ' . $section['section_name'])) ?></div>
   </div>
-  <p class="text-xs text-slate-400 mb-2"><?= h(GRADE_DESCRIPTOR_LEGEND) ?></p>
-<div id="grid-scroll-bottom" class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-x-auto">
+  <p class="text-xs text-slate-400 dark:text-slate-500 mb-2"><?= h(GRADE_DESCRIPTOR_LEGEND) ?></p>
+<div id="grid-scroll-bottom" class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-x-auto">
   <table class="text-sm min-w-full">
-    <thead class="bg-slate-50 text-slate-500 text-xs uppercase">
+    <thead class="bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 text-xs uppercase">
       <tr>
-        <th rowspan="2" class="text-left px-4 py-3 sticky left-0 bg-slate-50 align-bottom">Student</th>
+        <th rowspan="2" class="text-left px-4 py-3 sticky left-0 bg-slate-50 dark:bg-slate-900 align-bottom">Student</th>
         <?php foreach ($data['subjects'] as $subject): ?>
-          <th colspan="<?= $term + ($term === 3 ? 1 : 0) ?>" class="text-center px-3 py-2 whitespace-nowrap border-l border-slate-200 <?= $subject['is_child'] ? 'italic font-normal text-slate-500' : '' ?>"><?= h($subject['subject_name']) ?></th>
+          <th colspan="<?= $term + ($term === 3 ? 1 : 0) ?>" class="text-center px-3 py-2 whitespace-nowrap border-l border-slate-200 dark:border-slate-700 <?= $subject['is_child'] ? 'italic font-normal text-slate-500 dark:text-slate-400' : '' ?>"><?= h($subject['subject_name']) ?></th>
         <?php endforeach; ?>
         <th rowspan="2" class="text-center px-3 py-3 align-bottom">General Average</th>
         <th rowspan="2" class="text-center px-3 py-3 align-bottom">Rank</th>
@@ -68,24 +68,24 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
       <tr>
         <?php foreach ($data['subjects'] as $subject): ?>
           <?php for ($t = 1; $t <= $term; $t++): ?>
-            <th class="text-center px-2 py-1.5 font-medium text-[10px] border-l border-slate-100">T<?= $t ?></th>
+            <th class="text-center px-2 py-1.5 font-medium text-[10px] border-l border-slate-100 dark:border-slate-700">T<?= $t ?></th>
           <?php endfor; ?>
           <?php if ($term === 3): ?>
-            <th class="text-center px-2 py-1.5 font-medium text-[10px] border-l border-slate-100 text-accent-600">Final</th>
+            <th class="text-center px-2 py-1.5 font-medium text-[10px] border-l border-slate-100 dark:border-slate-700 text-accent-600 dark:text-accent-400">Final</th>
           <?php endif; ?>
         <?php endforeach; ?>
       </tr>
       <?php endif; ?>
     </thead>
-    <tbody class="divide-y divide-slate-100">
+    <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
       <?php $lastSex = null; foreach ($data['students'] as $student): ?>
       <?php if ($student['sex'] !== $lastSex): $lastSex = $student['sex']; ?>
       <tr>
-        <td colspan="99" class="px-4 py-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide bg-slate-50 sticky left-0"><?= $student['sex'] === 'M' ? 'Male' : 'Female' ?></td>
+        <td colspan="99" class="px-4 py-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide bg-slate-50 dark:bg-slate-900 sticky left-0"><?= $student['sex'] === 'M' ? 'Male' : 'Female' ?></td>
       </tr>
       <?php endif; ?>
       <tr>
-        <td class="px-4 py-2 font-medium whitespace-nowrap sticky left-0 bg-white"><?= h($student['full_name']) ?></td>
+        <td class="px-4 py-2 font-medium whitespace-nowrap sticky left-0 bg-white dark:bg-slate-800"><?= h($student['full_name']) ?></td>
         <?php foreach ($data['subjects'] as $subject): ?>
           <?php
               // A sex-split subject (e.g. one teacher for boys' TLE, another for girls') can
@@ -97,35 +97,35 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
               $studentStatus = $studentAssignment['status'] ?? $subject['status'];
           ?>
           <?php for ($t = 1; $t <= $term; $t++): $g = grade_whole($data['gradesByTerm'][$t][$student['id']][$subject['subject_id']] ?? null); ?>
-            <td class="px-2 py-2 text-center border-l border-slate-100 <?= $g !== null ? grade_display_class((float) $g) : '' ?>">
+            <td class="px-2 py-2 text-center border-l border-slate-100 dark:border-slate-700 <?= $g !== null ? grade_display_class((float) $g) : '' ?>">
               <?php if ($t === $term && $studentStatus !== 'published'): ?>
-                <span class="text-xs text-amber-500">Pending</span>
+                <span class="text-xs text-amber-500 dark:text-amber-400">Pending</span>
               <?php elseif ($g === null): ?>
-                <span class="text-slate-300">—</span>
+                <span class="text-slate-300 dark:text-slate-600">—</span>
               <?php else: ?>
-                <?= h($g) ?> <span class="text-[10px] font-normal normal-case text-slate-400">(<?= h(grade_descriptor_letter((float) $g)) ?>)</span>
+                <?= h($g) ?> <span class="text-[10px] font-normal normal-case text-slate-400 dark:text-slate-500">(<?= h(grade_descriptor_letter((float) $g)) ?>)</span>
               <?php endif; ?>
             </td>
           <?php endfor; ?>
           <?php if ($term === 3): $fg = grade_whole($data['finalGrades'][$student['id']][$subject['subject_id']] ?? null); ?>
-            <td class="px-2 py-2 text-center border-l border-slate-100 font-semibold <?= $fg !== null ? (grade_display_class((float) $fg) ?: 'text-accent-700') : 'text-accent-700' ?>">
+            <td class="px-2 py-2 text-center border-l border-slate-100 dark:border-slate-700 font-semibold <?= $fg !== null ? (grade_display_class((float) $fg) ?: 'text-accent-700 dark:text-accent-300') : 'text-accent-700 dark:text-accent-300' ?>">
               <?php if ($fg === null): ?>—<?php else: ?>
-                <?= h($fg) ?> <span class="text-[10px] font-normal normal-case text-slate-400">(<?= h(grade_descriptor_letter((float) $fg)) ?>)</span>
+                <?= h($fg) ?> <span class="text-[10px] font-normal normal-case text-slate-400 dark:text-slate-500">(<?= h(grade_descriptor_letter((float) $fg)) ?>)</span>
               <?php endif; ?>
             </td>
           <?php endif; ?>
         <?php endforeach; ?>
         <?php $avg = grade_whole($data['averages'][$student['id']]['average'] ?? null); ?>
-        <td class="px-3 py-2 text-center font-semibold <?= $avg !== null ? (grade_display_class((float) $avg) ?: 'text-accent-700') : 'text-accent-700' ?>">
+        <td class="px-3 py-2 text-center font-semibold <?= $avg !== null ? (grade_display_class((float) $avg) ?: 'text-accent-700 dark:text-accent-300') : 'text-accent-700 dark:text-accent-300' ?>">
           <?php if ($avg === null): ?>—<?php else: ?>
-            <?= h($avg) ?> <span class="text-[10px] font-normal normal-case text-slate-400">(<?= h(grade_descriptor_letter((float) $avg)) ?>)</span>
+            <?= h($avg) ?> <span class="text-[10px] font-normal normal-case text-slate-400 dark:text-slate-500">(<?= h(grade_descriptor_letter((float) $avg)) ?>)</span>
           <?php endif; ?>
         </td>
         <td class="px-3 py-2 text-center"><?= h($data['averages'][$student['id']]['rank_in_section'] ?? '—') ?></td>
       </tr>
       <?php endforeach; ?>
       <?php if (!$data['students']): ?>
-      <tr><td colspan="99" class="px-4 py-6 text-center text-slate-400">No students in this section yet.</td></tr>
+      <tr><td colspan="99" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500">No students in this section yet.</td></tr>
       <?php endif; ?>
     </tbody>
   </table>

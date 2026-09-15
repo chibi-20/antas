@@ -70,18 +70,18 @@ $mixClaimCount = function (array $sstIds) use ($pdo): int {
 
 // Cycled per card, purely decorative — gives each class its own visual identity at a glance.
 $cardThemes = [
-    ['gradient' => 'from-violet-300 to-purple-200', 'icon' => 'map-pin', 'text' => 'text-violet-700'],
-    ['gradient' => 'from-blue-300 to-sky-200', 'icon' => 'compass', 'text' => 'text-blue-700'],
+    ['gradient' => 'from-violet-300 to-purple-200', 'icon' => 'map-pin', 'text' => 'text-violet-700 dark:text-violet-300'],
+    ['gradient' => 'from-blue-300 to-sky-200', 'icon' => 'compass', 'text' => 'text-blue-700 dark:text-blue-300'],
     ['gradient' => 'from-teal-300 to-cyan-200', 'icon' => 'bank', 'text' => 'text-teal-700'],
-    ['gradient' => 'from-emerald-300 to-green-200', 'icon' => 'flag', 'text' => 'text-emerald-700'],
-    ['gradient' => 'from-amber-300 to-orange-200', 'icon' => 'ship', 'text' => 'text-amber-700'],
+    ['gradient' => 'from-emerald-300 to-green-200', 'icon' => 'flag', 'text' => 'text-emerald-700 dark:text-emerald-300'],
+    ['gradient' => 'from-amber-300 to-orange-200', 'icon' => 'ship', 'text' => 'text-amber-700 dark:text-amber-300'],
     ['gradient' => 'from-pink-300 to-rose-200', 'icon' => 'building', 'text' => 'text-pink-700'],
 ];
 
 render_header('My Classes', 'Manage and monitor the progress of your classes.');
 ?>
 <div class="flex justify-end mb-4">
-  <a href="<?= h(url('/change_password.php')) ?>" class="px-3 py-1.5 rounded-lg text-sm bg-slate-100 text-slate-600 hover:bg-slate-200">Change Password</a>
+  <a href="<?= h(url('/change_password.php')) ?>" class="px-3 py-1.5 rounded-lg text-sm bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600">Change Password</a>
 </div>
 <div class="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
   <?php foreach ($assignments as $i => $a):
@@ -98,9 +98,9 @@ render_header('My Classes', 'Manage and monitor the progress of your classes.');
       }
       $theme = $cardThemes[$i % count($cardThemes)];
   ?>
-  <div class="searchable-item bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden hover:shadow-md transition-shadow" data-search="<?= h($a['subject_name'] . ' ' . $a['grade_level'] . ' ' . $a['section_name']) ?>">
+  <div class="searchable-item bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden hover:shadow-md transition-shadow" data-search="<?= h($a['subject_name'] . ' ' . $a['grade_level'] . ' ' . $a['section_name']) ?>">
     <div class="h-16 bg-gradient-to-br <?= $theme['gradient'] ?> flex items-center px-5">
-      <div class="w-10 h-10 rounded-full bg-white/60 flex items-center justify-center <?= $theme['text'] ?>"><?= icon_svg($theme['icon'], 'w-5 h-5') ?></div>
+      <div class="w-10 h-10 rounded-full bg-white dark:bg-slate-800/60 flex items-center justify-center <?= $theme['text'] ?>"><?= icon_svg($theme['icon'], 'w-5 h-5') ?></div>
     </div>
     <div class="p-6">
       <?php
@@ -111,18 +111,18 @@ render_header('My Classes', 'Manage and monitor the progress of your classes.');
             default => null,
         };
       ?>
-      <div class="font-semibold text-slate-800 mb-1"><?= h($a['subject_name']) ?><?php if ($scopeLabel !== null): ?> <span class="font-normal text-xs text-slate-400">(<?= h($scopeLabel) ?>)</span><?php endif; ?></div>
+      <div class="font-semibold text-slate-800 dark:text-slate-100 mb-1"><?= h($a['subject_name']) ?><?php if ($scopeLabel !== null): ?> <span class="font-normal text-xs text-slate-400 dark:text-slate-500">(<?= h($scopeLabel) ?>)</span><?php endif; ?></div>
       <div class="text-xs font-medium mb-4 <?= $theme['text'] ?>"><?= h($a['grade_level'] . ' - ' . $a['section_name']) ?></div>
       <div class="flex flex-col gap-2">
         <?php for ($t = 1; $t <= 3; $t++): $sstId = $a['term_sst'][$t]; ?>
           <?php if ($sstId === null): ?>
-            <div class="flex items-center justify-between px-3 py-2 rounded-lg bg-slate-50 text-sm opacity-50">
-              <span class="font-medium text-slate-500">Term <?= $t ?></span>
-              <span class="text-xs text-slate-400">Not assigned</span>
+            <div class="flex items-center justify-between px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-900 text-sm opacity-50">
+              <span class="font-medium text-slate-500 dark:text-slate-400">Term <?= $t ?></span>
+              <span class="text-xs text-slate-400 dark:text-slate-500">Not assigned</span>
             </div>
           <?php else: ?>
-            <a href="<?= h(url('/teacher/class_record.php?sst_id=' . $sstId . '&term=' . $t)) ?>" class="flex items-center justify-between px-3 py-2 rounded-lg bg-slate-50 hover:bg-accent-50 text-sm">
-              <span class="font-medium text-slate-600">Term <?= $t ?></span>
+            <a href="<?= h(url('/teacher/class_record.php?sst_id=' . $sstId . '&term=' . $t)) ?>" class="flex items-center justify-between px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-900 hover:bg-accent-50 dark:hover:bg-accent-900/30 text-sm">
+              <span class="font-medium text-slate-600 dark:text-slate-300">Term <?= $t ?></span>
               <?= status_badge($statuses[$t] ?? 'not_started') ?>
             </a>
           <?php endif; ?>
@@ -132,7 +132,7 @@ render_header('My Classes', 'Manage and monitor the progress of your classes.');
   </div>
   <?php endforeach; ?>
   <?php if (!$assignments): ?>
-  <div class="text-slate-400 text-sm">No classes assigned yet — ask an admin to set up your subject assignment.</div>
+  <div class="text-slate-400 dark:text-slate-500 text-sm">No classes assigned yet — ask an admin to set up your subject assignment.</div>
   <?php endif; ?>
 </div>
 <?php render_footer(); ?>

@@ -99,10 +99,10 @@ if (isset($_GET['edit'])) {
 
 render_header('Head Teachers');
 ?>
-<div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6 mb-6 max-w-lg">
-  <h2 class="text-sm font-semibold text-slate-600 mb-4"><?= $editing ? 'Edit Head Teacher Assignment' : 'Add Head Teacher' ?></h2>
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-6 mb-6 max-w-lg">
+  <h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-4"><?= $editing ? 'Edit Head Teacher Assignment' : 'Add Head Teacher' ?></h2>
   <?php if (!$editing): ?>
-  <p class="text-xs text-slate-400 mb-4">Head Teacher is a capability on top of a Subject Teacher account, not a separate login type — so the same person can still teach classes. Pick an existing teacher, or create a brand-new account right here in one step.</p>
+  <p class="text-xs text-slate-400 dark:text-slate-500 mb-4">Head Teacher is a capability on top of a Subject Teacher account, not a separate login type — so the same person can still teach classes. Pick an existing teacher, or create a brand-new account right here in one step.</p>
   <?php endif; ?>
   <form method="post" id="ht-form">
     <?= csrf_field() ?>
@@ -116,71 +116,71 @@ render_header('Head Teachers');
     </div>
 
     <div id="ht-mode-existing">
-      <label class="block text-sm font-medium text-slate-600 mb-1">Teacher</label>
-      <select name="head_teacher_id" class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg js-searchable" data-placeholder="Search teachers…">
+      <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Teacher</label>
+      <select name="head_teacher_id" class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg js-searchable" data-placeholder="Search teachers…">
         <?= select_options($teachers, 'id', 'full_name', null) ?>
       </select>
     </div>
 
     <div id="ht-mode-new" class="hidden">
-      <label class="block text-sm font-medium text-slate-600 mb-1">Full name</label>
-      <input type="text" name="full_name" class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+      <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Full name</label>
+      <input type="text" name="full_name" class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
       <div class="grid grid-cols-2 gap-3 mb-4">
-        <div><label class="block text-xs font-medium text-slate-500 mb-1">Username</label><input type="text" name="username" class="w-full px-3 py-2 border border-slate-300 rounded-lg"></div>
-        <div><label class="block text-xs font-medium text-slate-500 mb-1">Employee #</label><input type="text" name="employee_number" class="w-full px-3 py-2 border border-slate-300 rounded-lg"></div>
+        <div><label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Username</label><input type="text" name="username" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg"></div>
+        <div><label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Employee #</label><input type="text" name="employee_number" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg"></div>
       </div>
-      <label class="block text-sm font-medium text-slate-600 mb-1">Email (optional)</label>
-      <input type="email" name="email" class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
-      <label class="block text-sm font-medium text-slate-600 mb-1">Password</label>
-      <input type="password" name="password" class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+      <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Email (optional)</label>
+      <input type="email" name="email" class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
+      <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Password</label>
+      <input type="password" name="password" class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
     </div>
     <?php else: ?>
-      <label class="block text-sm font-medium text-slate-600 mb-1">Teacher</label>
-      <select name="head_teacher_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg js-searchable" data-placeholder="Search teachers…">
+      <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Teacher</label>
+      <select name="head_teacher_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg js-searchable" data-placeholder="Search teachers…">
         <?= select_options($teachers, 'id', 'full_name', $editing['head_teacher_id'] ?? null) ?>
       </select>
     <?php endif; ?>
 
-    <label class="block text-sm font-medium text-slate-600 mb-1">School year</label>
-    <select name="school_year_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+    <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">School year</label>
+    <select name="school_year_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
       <?= select_options($schoolYears, 'id', 'year_label', $editing['school_year_id'] ?? (active_school_year()['id'] ?? null)) ?>
     </select>
-    <label class="block text-sm font-medium text-slate-600 mb-1">Subject / Learning Area</label>
-    <select name="subject_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+    <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Subject / Learning Area</label>
+    <select name="subject_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
       <?= select_options($subjects, 'id', 'subject_name', $editing['subject_id'] ?? null) ?>
     </select>
     <div class="flex gap-2">
       <button type="submit" class="bg-accent-600 hover:bg-accent-700 text-white font-medium px-4 py-2 rounded-lg text-sm"><?= $editing ? 'Save Changes' : 'Add Head Teacher' ?></button>
-      <?php if ($editing): ?><a href="<?= h(url('/admin/head_teachers.php')) ?>" class="px-4 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-100">Cancel</a><?php endif; ?>
+      <?php if ($editing): ?><a href="<?= h(url('/admin/head_teachers.php')) ?>" class="px-4 py-2 rounded-lg text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">Cancel</a><?php endif; ?>
     </div>
   </form>
 </div>
 
-<div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden">
   <table class="w-full text-sm">
-    <thead class="bg-slate-50 text-slate-500 text-xs uppercase">
+    <thead class="bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 text-xs uppercase">
       <tr><th class="text-left px-4 py-3">Head Teacher</th><th class="text-left px-4 py-3">Subject</th><th class="text-left px-4 py-3">Year</th><th class="text-left px-4 py-3">Status</th><th class="px-4 py-3"></th></tr>
     </thead>
-    <tbody class="divide-y divide-slate-100">
+    <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
       <?php foreach ($assignments as $a): ?>
       <tr>
-        <td class="px-4 py-3 font-medium"><?= h($a['ht_name']) ?> <span class="text-slate-400 font-normal">(<?= h($a['ht_username']) ?>)</span></td>
-        <td class="px-4 py-3 text-slate-600"><?= h($a['subject_name']) ?></td>
-        <td class="px-4 py-3 text-slate-500"><?= h($a['year_label']) ?></td>
-        <td class="px-4 py-3"><?= $a['is_active'] ? '<span class="text-emerald-600">Active</span>' : '<span class="text-slate-400">Inactive</span>' ?></td>
+        <td class="px-4 py-3 font-medium"><?= h($a['ht_name']) ?> <span class="text-slate-400 dark:text-slate-500 font-normal">(<?= h($a['ht_username']) ?>)</span></td>
+        <td class="px-4 py-3 text-slate-600 dark:text-slate-300"><?= h($a['subject_name']) ?></td>
+        <td class="px-4 py-3 text-slate-500 dark:text-slate-400"><?= h($a['year_label']) ?></td>
+        <td class="px-4 py-3"><?= $a['is_active'] ? '<span class="text-emerald-600 dark:text-emerald-400">Active</span>' : '<span class="text-slate-400 dark:text-slate-500">Inactive</span>' ?></td>
         <td class="px-4 py-3 text-right space-x-2">
-          <a href="<?= h(url('/admin/head_teachers.php?edit=' . $a['id'])) ?>" class="text-accent-600 hover:underline">Edit</a>
+          <a href="<?= h(url('/admin/head_teachers.php?edit=' . $a['id'])) ?>" class="text-accent-600 dark:text-accent-400 hover:underline">Edit</a>
           <form method="post" class="inline">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="toggle_active">
             <input type="hidden" name="id" value="<?= (int) $a['id'] ?>">
-            <button type="submit" class="text-slate-500 hover:underline"><?= $a['is_active'] ? 'Deactivate' : 'Activate' ?></button>
+            <button type="submit" class="text-slate-500 dark:text-slate-400 hover:underline"><?= $a['is_active'] ? 'Deactivate' : 'Activate' ?></button>
           </form>
         </td>
       </tr>
       <?php endforeach; ?>
       <?php if (!$assignments): ?>
-      <tr><td colspan="5" class="px-4 py-6 text-center text-slate-400">No Head Teachers yet.</td></tr>
+      <tr><td colspan="5" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500">No Head Teachers yet.</td></tr>
       <?php endif; ?>
     </tbody>
   </table>

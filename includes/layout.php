@@ -37,7 +37,7 @@ function status_badge(?string $status): string
 {
     $status = $status ?? 'not_started';
     $label = STATUS_LABELS[$status] ?? $status;
-    $classes = STATUS_CLASSES[$status] ?? 'bg-slate-100 text-slate-600';
+    $classes = STATUS_CLASSES[$status] ?? 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300';
     return '<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ' . $classes . '">' . htmlspecialchars($label) . '</span>';
 }
 
@@ -293,7 +293,7 @@ tailwind.config = {
 </script>
 <link rel="stylesheet" href="<?= htmlspecialchars(versioned_url('/assets/css/app.css')) ?>">
 </head>
-<body class="bg-slate-50 dark:bg-slate-900 text-slate-800 min-h-screen no-print">
+<body class="bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 min-h-screen no-print">
 <?php if ($user): ?>
 <?php $notifications = get_notifications($user); $notifCount = notification_count($user); ?>
 <div class="flex min-h-screen">
@@ -349,7 +349,7 @@ tailwind.config = {
             <?php if (!$notifications): ?>
             <div class="px-4 py-6 text-center text-sm text-slate-400 dark:text-slate-500">You're all caught up.</div>
             <?php else: ?>
-              <?php foreach ($notifications as $n): [$dotClass, $labelClass] = $notifColors[$n['type']] ?? ['bg-slate-400', 'text-slate-500']; ?>
+              <?php foreach ($notifications as $n): [$dotClass, $labelClass] = $notifColors[$n['type']] ?? ['bg-slate-400', 'text-slate-500 dark:text-slate-400']; ?>
               <a href="<?= htmlspecialchars($n['href']) ?>" class="block px-4 py-3 border-b border-slate-50 dark:border-slate-700/50 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-700/50 <?= $n['read'] ? '' : 'bg-accent-50/60 dark:bg-accent-900/20' ?>">
                 <div class="flex items-center gap-2 mb-0.5">
                   <span class="w-1.5 h-1.5 rounded-full flex-shrink-0 <?= $dotClass ?>"></span>

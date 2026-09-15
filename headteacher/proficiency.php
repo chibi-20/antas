@@ -176,35 +176,35 @@ render_header('Proficiency Level', 'Distribution of published grades across perf
 echo ht_tab_nav('proficiency');
 ?>
 <form method="get" class="flex flex-wrap gap-3 mb-6">
-  <select name="subject_id" onchange="this.form.submit()" class="px-3 py-2 text-sm border border-slate-300 rounded-lg">
+  <select name="subject_id" onchange="this.form.submit()" class="px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg">
     <?= select_options($supervisedSubjects, 'id', 'subject_name', $subjectId) ?>
   </select>
   <?php for ($t = 1; $t <= 3; $t++): ?>
-    <button type="submit" name="term" value="<?= $t ?>" class="px-3 py-1.5 rounded-lg text-sm <?= $t === $term ? 'bg-accent-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50' ?>">Term <?= $t ?></button>
+    <button type="submit" name="term" value="<?= $t ?>" class="px-3 py-1.5 rounded-lg text-sm <?= $t === $term ? 'bg-accent-600 text-white' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700' ?>">Term <?= $t ?></button>
   <?php endfor; ?>
 </form>
 
 <?php if (!$supervisedSubjects): ?>
-<div class="bg-white border border-slate-200 rounded-xl shadow-sm px-4 py-8 text-center text-slate-400 text-sm">You don't currently supervise any subject.</div>
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm px-4 py-8 text-center text-slate-400 dark:text-slate-500 text-sm">You don't currently supervise any subject.</div>
 <?php elseif (!$perGradeLevel): ?>
-<div class="bg-white border border-slate-200 rounded-xl shadow-sm px-4 py-8 text-center text-slate-400 text-sm">No published grades yet for this subject/term.</div>
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm px-4 py-8 text-center text-slate-400 dark:text-slate-500 text-sm">No published grades yet for this subject/term.</div>
 <?php else: ?>
 
-<h2 class="text-sm font-semibold text-slate-600 mb-3">Grade Level Rollup</h2>
+<h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-3">Grade Level Rollup</h2>
 <?php foreach ($perGradeLevel as $glId => $gl): ?>
-<div class="bg-white border border-slate-200 rounded-xl shadow-sm p-5 mb-6">
-  <div class="font-semibold text-slate-800 mb-4"><?= h($gl['name']) ?></div>
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-5 mb-6">
+  <div class="font-semibold text-slate-800 dark:text-slate-100 mb-4"><?= h($gl['name']) ?></div>
   <div class="grid md:grid-cols-2 gap-6">
     <div class="overflow-x-auto">
       <table class="w-full text-sm">
-        <thead class="text-slate-500 text-xs uppercase">
+        <thead class="text-slate-500 dark:text-slate-400 text-xs uppercase">
           <tr><th class="text-left py-2">Band</th><th class="text-left py-2">Grade</th><th class="text-right py-2">Male</th><th class="text-right py-2">Female</th><th class="text-right py-2">Total</th></tr>
         </thead>
-        <tbody class="divide-y divide-slate-100">
+        <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
           <?php foreach ($gl['bands'] as $band => $counts): ?>
           <tr>
             <td class="py-2"><?= h($bandLabels[$band]) ?></td>
-            <td class="py-2 text-slate-500"><?= h($bandRanges[$band]) ?></td>
+            <td class="py-2 text-slate-500 dark:text-slate-400"><?= h($bandRanges[$band]) ?></td>
             <td class="py-2 text-right"><?= $counts['M'] ?></td>
             <td class="py-2 text-right"><?= $counts['F'] ?></td>
             <td class="py-2 text-right font-medium"><?= $counts['M'] + $counts['F'] ?></td>
@@ -218,21 +218,21 @@ echo ht_tab_nav('proficiency');
 </div>
 <?php endforeach; ?>
 
-<h2 class="text-sm font-semibold text-slate-600 mb-3">Per Section</h2>
+<h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-3">Per Section</h2>
 <div class="grid md:grid-cols-2 gap-4">
   <?php foreach ($perSection as $sec): ?>
-  <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
-    <div class="font-semibold text-slate-800 mb-3"><?= h($sec['name']) ?></div>
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-5">
+    <div class="font-semibold text-slate-800 dark:text-slate-100 mb-3"><?= h($sec['name']) ?></div>
     <table class="w-full text-sm">
-      <thead class="text-slate-500 text-xs uppercase">
+      <thead class="text-slate-500 dark:text-slate-400 text-xs uppercase">
         <tr><th class="text-left py-1.5">Band</th><th class="text-left py-1.5">Grade</th><th class="text-right py-1.5">M</th><th class="text-right py-1.5">F</th><th class="text-right py-1.5">Total</th></tr>
       </thead>
-      <tbody class="divide-y divide-slate-100">
+      <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
         <?php foreach ($sec['bands'] as $band => $counts): ?>
           <?php if ($counts['M'] + $counts['F'] === 0) continue; ?>
         <tr>
           <td class="py-1.5"><?= h($bandLabels[$band]) ?></td>
-          <td class="py-1.5 text-slate-500"><?= h($bandRanges[$band]) ?></td>
+          <td class="py-1.5 text-slate-500 dark:text-slate-400"><?= h($bandRanges[$band]) ?></td>
           <td class="py-1.5 text-right"><?= $counts['M'] ?></td>
           <td class="py-1.5 text-right"><?= $counts['F'] ?></td>
           <td class="py-1.5 text-right font-medium"><?= $counts['M'] + $counts['F'] ?></td>
@@ -247,23 +247,55 @@ echo ht_tab_nav('proficiency');
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script>
 <?php $chartLabels = array_map(fn($band) => [$bandLabels[$band], '(' . $bandRanges[$band] . ')'], $bandKeys); ?>
-<?php foreach ($perGradeLevel as $glId => $gl): ?>
-new Chart(document.getElementById('pl-chart-<?= (int) $glId ?>'), {
-  type: 'bar',
-  data: {
-    labels: <?= json_encode($chartLabels) ?>,
-    datasets: [
-      { label: 'Male', data: <?= json_encode(array_column($gl['bands'], 'M')) ?>, backgroundColor: '#4f46e5' },
-      { label: 'Female', data: <?= json_encode(array_column($gl['bands'], 'F')) ?>, backgroundColor: '#f472b6' }
-    ]
-  },
-  options: {
-    responsive: true,
-    scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } }, x: { ticks: { autoSkip: false, maxRotation: 40, minRotation: 40, font: { size: 10 } } } },
-    plugins: { legend: { position: 'bottom' } }
-  }
-});
-<?php endforeach; ?>
+(function () {
+  // Chart.js's own default text/grid colors (a mid-grey tuned for a white canvas) go
+  // low-contrast against this page's dark-mode cards — set from the theme at load time, and
+  // kept in sync afterward since #theme-toggle (assets/js/app.js) flips html.dark instantly
+  // without a reload, unlike every Tailwind dark: class here which repaints on its own.
+  var isDark = document.documentElement.classList.contains('dark');
+  var gridColor = isDark ? 'rgba(148, 163, 184, 0.15)' : 'rgba(100, 116, 139, 0.1)';
+  Chart.defaults.color = isDark ? '#94a3b8' : '#64748b';
+  Chart.defaults.borderColor = gridColor;
+
+  var plCharts = [];
+  <?php foreach ($perGradeLevel as $glId => $gl): ?>
+  plCharts.push(new Chart(document.getElementById('pl-chart-<?= (int) $glId ?>'), {
+    type: 'bar',
+    data: {
+      labels: <?= json_encode($chartLabels) ?>,
+      datasets: [
+        { label: 'Male', data: <?= json_encode(array_column($gl['bands'], 'M')) ?>, backgroundColor: '#4f46e5' },
+        { label: 'Female', data: <?= json_encode(array_column($gl['bands'], 'F')) ?>, backgroundColor: '#f472b6' }
+      ]
+    },
+    options: {
+      responsive: true,
+      scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } }, x: { ticks: { autoSkip: false, maxRotation: 40, minRotation: 40, font: { size: 10 } } } },
+      plugins: { legend: { position: 'bottom' } }
+    }
+  }));
+  <?php endforeach; ?>
+
+  // Watches html's class attribute directly rather than listening for the #theme-toggle click
+  // itself — a click-listener race is real here: this script runs (and so attaches its
+  // listener) before assets/js/app.js even loads, so it would fire BEFORE app.js's own click
+  // handler actually flips the "dark" class, reading the state that's about to be replaced
+  // instead of the new one. Observing the attribute directly sidesteps the ordering question
+  // entirely and reacts to the actual change instead of a proxy for it.
+  new MutationObserver(function () {
+    var nowDark = document.documentElement.classList.contains('dark');
+    var nowGrid = nowDark ? 'rgba(148, 163, 184, 0.15)' : 'rgba(100, 116, 139, 0.1)';
+    var nowColor = nowDark ? '#94a3b8' : '#64748b';
+    plCharts.forEach(function (chart) {
+      chart.options.scales.x.ticks.color = nowColor;
+      chart.options.scales.y.ticks.color = nowColor;
+      chart.options.scales.x.grid.color = nowGrid;
+      chart.options.scales.y.grid.color = nowGrid;
+      chart.options.plugins.legend.labels.color = nowColor;
+      chart.update();
+    });
+  }).observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+})();
 </script>
 <?php endif; ?>
 <?php render_footer(); ?>

@@ -82,31 +82,31 @@ $sectionLabels = array_map(fn($s) => ['id' => $s['id'], 'label' => $s['grade_lev
 
 render_header('Import Students');
 ?>
-<div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6 mb-6 max-w-xl">
-  <h2 class="text-sm font-semibold text-slate-600 mb-2">Import from CSV</h2>
-  <p class="text-xs text-slate-400 mb-4">Two columns only: <strong>Full Name, Sex</strong> (M/F or Male/Female). A header row is fine — it's detected automatically. LRN and birthdate are intentionally left out of bulk import to avoid moving sensitive student data through a spreadsheet; add those later per student if needed under Students.</p>
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-6 mb-6 max-w-xl">
+  <h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-2">Import from CSV</h2>
+  <p class="text-xs text-slate-400 dark:text-slate-500 mb-4">Two columns only: <strong>Full Name, Sex</strong> (M/F or Male/Female). A header row is fine — it's detected automatically. LRN and birthdate are intentionally left out of bulk import to avoid moving sensitive student data through a spreadsheet; add those later per student if needed under Students.</p>
   <form method="post" enctype="multipart/form-data">
     <?= csrf_field() ?>
-    <label class="block text-sm font-medium text-slate-600 mb-1">School year</label>
-    <select name="school_year_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+    <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">School year</label>
+    <select name="school_year_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
       <?= select_options($schoolYears, 'id', 'year_label', active_school_year()['id'] ?? null) ?>
     </select>
-    <label class="block text-sm font-medium text-slate-600 mb-1">Section</label>
-    <select name="section_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+    <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Section</label>
+    <select name="section_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
       <option value="">Select a section…</option>
       <?= select_options($sectionLabels, 'id', 'label', null) ?>
     </select>
-    <label class="block text-sm font-medium text-slate-600 mb-1">CSV file</label>
+    <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">CSV file</label>
     <input type="file" name="csv_file" accept=".csv,text/csv" required class="w-full mb-4 text-sm">
     <button type="submit" class="bg-accent-600 hover:bg-accent-700 text-white font-medium px-4 py-2 rounded-lg text-sm">Import</button>
-    <a href="<?= h(url('/admin/students.php')) ?>" class="px-4 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-100">Back to Students</a>
+    <a href="<?= h(url('/admin/students.php')) ?>" class="px-4 py-2 rounded-lg text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">Back to Students</a>
   </form>
 </div>
 
 <?php if ($results && $results['skipped']): ?>
-<div class="bg-white border border-amber-200 rounded-xl shadow-sm p-6 max-w-xl">
-  <h2 class="text-sm font-semibold text-amber-700 mb-3">Skipped rows (<?= count($results['skipped']) ?>)</h2>
-  <ul class="text-sm text-slate-600 space-y-1 list-disc list-inside">
+<div class="bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-800 rounded-xl shadow-sm p-6 max-w-xl">
+  <h2 class="text-sm font-semibold text-amber-700 dark:text-amber-300 mb-3">Skipped rows (<?= count($results['skipped']) ?>)</h2>
+  <ul class="text-sm text-slate-600 dark:text-slate-300 space-y-1 list-disc list-inside">
     <?php foreach ($results['skipped'] as $reason): ?>
       <li><?= h($reason) ?></li>
     <?php endforeach; ?>

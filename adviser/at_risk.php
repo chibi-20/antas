@@ -75,34 +75,34 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
   <form method="get" class="flex gap-1">
     <input type="hidden" name="section_id" value="<?= $sectionId ?>">
     <?php for ($t = 1; $t <= 3; $t++): ?>
-      <button type="submit" name="term" value="<?= $t ?>" class="px-3 py-1.5 rounded-lg text-sm <?= $t === $term ? 'bg-accent-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50' ?>">Term <?= $t ?></button>
+      <button type="submit" name="term" value="<?= $t ?>" class="px-3 py-1.5 rounded-lg text-sm <?= $t === $term ? 'bg-accent-600 text-white' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700' ?>">Term <?= $t ?></button>
     <?php endfor; ?>
   </form>
-  <div class="text-sm text-slate-500">
-    <span class="font-semibold text-rose-600"><?= count($atRisk) ?></span> student<?= count($atRisk) === 1 ? '' : 's' ?>
-    · <span class="font-semibold text-rose-600"><?= $failingSubjectCount ?></span> subject grade<?= $failingSubjectCount === 1 ? '' : 's' ?> below 75
+  <div class="text-sm text-slate-500 dark:text-slate-400">
+    <span class="font-semibold text-rose-600 dark:text-rose-400"><?= count($atRisk) ?></span> student<?= count($atRisk) === 1 ? '' : 's' ?>
+    · <span class="font-semibold text-rose-600 dark:text-rose-400"><?= $failingSubjectCount ?></span> subject grade<?= $failingSubjectCount === 1 ? '' : 's' ?> below 75
   </div>
 </div>
 
 <?php if (!$atRisk): ?>
-<div class="bg-white border border-slate-200 rounded-xl shadow-sm px-4 py-8 text-center text-slate-400 text-sm">No students below 75 in any published subject for this term.</div>
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm px-4 py-8 text-center text-slate-400 dark:text-slate-500 text-sm">No students below 75 in any published subject for this term.</div>
 <?php else: ?>
-<div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden">
   <table class="w-full text-sm">
-    <thead class="bg-slate-50 text-slate-500 text-xs uppercase">
+    <thead class="bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 text-xs uppercase">
       <tr><th class="text-left px-4 py-3">Student</th><th class="text-left px-4 py-3">Subject</th><th class="text-left px-4 py-3">Grade</th><th class="text-left px-4 py-3">Status</th><th class="text-left px-4 py-3">Reason</th></tr>
     </thead>
-    <tbody class="divide-y divide-slate-100">
+    <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
       <?php foreach ($atRisk as $row): ?>
         <?php foreach ($row['subjects'] as $i => $s): ?>
         <tr>
-          <td class="px-4 py-3 font-medium <?= $i > 0 ? 'text-slate-300' : '' ?>"><?= $i === 0 ? h($row['student']['full_name']) : '' ?></td>
-          <td class="px-4 py-3 text-slate-600"><?= h($s['name']) ?></td>
+          <td class="px-4 py-3 font-medium <?= $i > 0 ? 'text-slate-300 dark:text-slate-600' : '' ?>"><?= $i === 0 ? h($row['student']['full_name']) : '' ?></td>
+          <td class="px-4 py-3 text-slate-600 dark:text-slate-300"><?= h($s['name']) ?></td>
           <td class="px-4 py-3 <?= grade_display_class((float) $s['grade']) ?>"><?= h($s['grade']) ?></td>
           <td class="px-4 py-3">
-            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium <?= $s['band'] === 'Failing' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700' ?>"><?= h($s['band']) ?></span>
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium <?= $s['band'] === 'Failing' ? 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300' : 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300' ?>"><?= h($s['band']) ?></span>
           </td>
-          <td class="px-4 py-3 text-slate-500 text-xs"><?= $s['reason'] !== null ? h($s['reason']) : '<span class="text-slate-300 italic">Not yet given</span>' ?></td>
+          <td class="px-4 py-3 text-slate-500 dark:text-slate-400 text-xs"><?= $s['reason'] !== null ? h($s['reason']) : '<span class="text-slate-300 dark:text-slate-600 italic">Not yet given</span>' ?></td>
         </tr>
         <?php endforeach; ?>
       <?php endforeach; ?>

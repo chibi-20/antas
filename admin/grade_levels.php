@@ -55,42 +55,42 @@ if (isset($_GET['edit'])) {
 
 render_header('Grade Levels');
 ?>
-<div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6 mb-6 max-w-lg">
-  <h2 class="text-sm font-semibold text-slate-600 mb-4"><?= $editing ? 'Edit Grade Level' : 'Add Grade Level' ?></h2>
-  <p class="text-xs text-slate-400 mb-4">A controlled list keeps section entry consistent across the whole school (or division, if this ever scales that far) instead of free-text like "Grade 7" vs "G7". Sort order controls display order everywhere (0 = first).</p>
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-6 mb-6 max-w-lg">
+  <h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-4"><?= $editing ? 'Edit Grade Level' : 'Add Grade Level' ?></h2>
+  <p class="text-xs text-slate-400 dark:text-slate-500 mb-4">A controlled list keeps section entry consistent across the whole school (or division, if this ever scales that far) instead of free-text like "Grade 7" vs "G7". Sort order controls display order everywhere (0 = first).</p>
   <form method="post">
     <?= csrf_field() ?>
     <input type="hidden" name="action" value="<?= $editing ? 'update' : 'create' ?>">
     <?php if ($editing): ?><input type="hidden" name="id" value="<?= (int) $editing['id'] ?>"><?php endif; ?>
     <div class="grid grid-cols-3 gap-3 mb-4">
-      <div class="col-span-2"><label class="block text-xs font-medium text-slate-500 mb-1">Name</label><input type="text" name="name" required placeholder="Grade 7" value="<?= h($editing['name'] ?? '') ?>" class="w-full px-3 py-2 border border-slate-300 rounded-lg"></div>
-      <div><label class="block text-xs font-medium text-slate-500 mb-1">Sort order</label><input type="number" name="sort_order" value="<?= h($editing['sort_order'] ?? (int) ($pdo->query('SELECT COALESCE(MAX(sort_order),0)+1 FROM grade_levels')->fetchColumn())) ?>" class="w-full px-3 py-2 border border-slate-300 rounded-lg"></div>
+      <div class="col-span-2"><label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Name</label><input type="text" name="name" required placeholder="Grade 7" value="<?= h($editing['name'] ?? '') ?>" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg"></div>
+      <div><label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Sort order</label><input type="number" name="sort_order" value="<?= h($editing['sort_order'] ?? (int) ($pdo->query('SELECT COALESCE(MAX(sort_order),0)+1 FROM grade_levels')->fetchColumn())) ?>" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg"></div>
     </div>
     <div class="flex gap-2">
       <button type="submit" class="bg-accent-600 hover:bg-accent-700 text-white font-medium px-4 py-2 rounded-lg text-sm"><?= $editing ? 'Save Changes' : 'Add' ?></button>
-      <?php if ($editing): ?><a href="<?= h(url('/admin/grade_levels.php')) ?>" class="px-4 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-100">Cancel</a><?php endif; ?>
+      <?php if ($editing): ?><a href="<?= h(url('/admin/grade_levels.php')) ?>" class="px-4 py-2 rounded-lg text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">Cancel</a><?php endif; ?>
     </div>
   </form>
 </div>
 
-<div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden">
   <table class="w-full text-sm">
-    <thead class="bg-slate-50 text-slate-500 text-xs uppercase">
+    <thead class="bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 text-xs uppercase">
       <tr><th class="text-left px-4 py-3">Name</th><th class="text-left px-4 py-3">Sort Order</th><th class="text-left px-4 py-3">Status</th><th class="px-4 py-3"></th></tr>
     </thead>
-    <tbody class="divide-y divide-slate-100">
+    <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
       <?php foreach ($gradeLevels as $gl): ?>
       <tr>
         <td class="px-4 py-3 font-medium"><?= h($gl['name']) ?></td>
-        <td class="px-4 py-3 text-slate-600"><?= (int) $gl['sort_order'] ?></td>
-        <td class="px-4 py-3"><?= $gl['is_active'] ? '<span class="text-emerald-600">Active</span>' : '<span class="text-slate-400">Inactive</span>' ?></td>
+        <td class="px-4 py-3 text-slate-600 dark:text-slate-300"><?= (int) $gl['sort_order'] ?></td>
+        <td class="px-4 py-3"><?= $gl['is_active'] ? '<span class="text-emerald-600 dark:text-emerald-400">Active</span>' : '<span class="text-slate-400 dark:text-slate-500">Inactive</span>' ?></td>
         <td class="px-4 py-3 text-right space-x-2">
-          <a href="<?= h(url('/admin/grade_levels.php?edit=' . $gl['id'])) ?>" class="text-accent-600 hover:underline">Edit</a>
+          <a href="<?= h(url('/admin/grade_levels.php?edit=' . $gl['id'])) ?>" class="text-accent-600 dark:text-accent-400 hover:underline">Edit</a>
           <form method="post" class="inline">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="toggle_active">
             <input type="hidden" name="id" value="<?= (int) $gl['id'] ?>">
-            <button type="submit" class="text-slate-500 hover:underline"><?= $gl['is_active'] ? 'Deactivate' : 'Activate' ?></button>
+            <button type="submit" class="text-slate-500 dark:text-slate-400 hover:underline"><?= $gl['is_active'] ? 'Deactivate' : 'Activate' ?></button>
           </form>
         </td>
       </tr>

@@ -112,95 +112,95 @@ foreach ($sections as $sec) {
 
 render_header('Sections');
 ?>
-<div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6 mb-6 max-w-lg">
-  <h2 class="text-sm font-semibold text-slate-600 mb-4"><?= $editing ? 'Edit Section' : 'Add Section' ?></h2>
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-6 mb-6 max-w-lg">
+  <h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-4"><?= $editing ? 'Edit Section' : 'Add Section' ?></h2>
   <form method="post">
     <?= csrf_field() ?>
     <input type="hidden" name="action" value="<?= $editing ? 'update' : 'create' ?>">
     <?php if ($editing): ?><input type="hidden" name="id" value="<?= (int) $editing['id'] ?>"><?php endif; ?>
-    <label class="block text-sm font-medium text-slate-600 mb-1">School year</label>
-    <select name="school_year_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+    <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">School year</label>
+    <select name="school_year_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
       <?= select_options($schoolYears, 'id', 'year_label', $editing['school_year_id'] ?? $activeYear['id'] ?? null) ?>
     </select>
     <div class="grid grid-cols-2 gap-3 mb-4">
       <div>
-        <label class="block text-xs font-medium text-slate-500 mb-1">Grade level</label>
-        <select name="grade_level_id" required class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+        <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Grade level</label>
+        <select name="grade_level_id" required class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
           <option value="">Select…</option>
           <?= select_options($gradeLevels, 'id', 'name', $editing['grade_level_id'] ?? null) ?>
         </select>
       </div>
-      <div><label class="block text-xs font-medium text-slate-500 mb-1">Section name</label><input type="text" name="section_name" required placeholder="Diamond" value="<?= h($editing['section_name'] ?? '') ?>" class="w-full px-3 py-2 border border-slate-300 rounded-lg"></div>
+      <div><label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Section name</label><input type="text" name="section_name" required placeholder="Diamond" value="<?= h($editing['section_name'] ?? '') ?>" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg"></div>
     </div>
-    <label class="block text-sm font-medium text-slate-600 mb-1">Adviser</label>
-    <select name="adviser_id" class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg js-searchable" data-placeholder="Search teachers…">
+    <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Adviser</label>
+    <select name="adviser_id" class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg js-searchable" data-placeholder="Search teachers…">
       <option value="">Unassigned</option>
       <?= select_options(available_advisers($advisers, $takenAdviserIds, $editing['adviser_id'] ?? null), 'id', 'full_name', $editing['adviser_id'] ?? null) ?>
     </select>
-    <p class="text-xs text-slate-400 -mt-3 mb-4">Teachers already advising another section this year aren't listed.</p>
-    <label class="flex items-center gap-2 mb-4 text-sm text-slate-600">
+    <p class="text-xs text-slate-400 dark:text-slate-500 -mt-3 mb-4">Teachers already advising another section this year aren't listed.</p>
+    <label class="flex items-center gap-2 mb-4 text-sm text-slate-600 dark:text-slate-300">
       <input type="checkbox" name="is_special_program" value="1" <?= !empty($editing['is_special_program']) ? 'checked' : '' ?>>
       Special Program section (students have individual majors — e.g. Special Program for the Arts/Journalism)
     </label>
     <div class="flex gap-2">
       <button type="submit" class="bg-accent-600 hover:bg-accent-700 text-white font-medium px-4 py-2 rounded-lg text-sm"><?= $editing ? 'Save Changes' : 'Add' ?></button>
-      <?php if ($editing): ?><a href="<?= h(url('/admin/sections.php')) ?>" class="px-4 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-100">Cancel</a><?php endif; ?>
+      <?php if ($editing): ?><a href="<?= h(url('/admin/sections.php')) ?>" class="px-4 py-2 rounded-lg text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">Cancel</a><?php endif; ?>
     </div>
   </form>
 </div>
 
 <div class="flex items-center justify-between mb-4">
   <form method="get" class="flex items-center gap-2 text-sm">
-    <label class="text-slate-500">School year:</label>
-    <select name="school_year_id" onchange="this.form.submit()" class="px-3 py-2 border border-slate-300 rounded-lg">
+    <label class="text-slate-500 dark:text-slate-400">School year:</label>
+    <select name="school_year_id" onchange="this.form.submit()" class="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
       <?= select_options($schoolYears, 'id', 'year_label', $filterYearId) ?>
     </select>
   </form>
-  <a href="<?= h(url('/admin/import_sections.php')) ?>" class="px-3 py-1.5 rounded-lg text-sm bg-slate-100 text-slate-600 hover:bg-slate-200">Import Sections</a>
+  <a href="<?= h(url('/admin/import_sections.php')) ?>" class="px-3 py-1.5 rounded-lg text-sm bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600">Import Sections</a>
 </div>
 
 <?php foreach ($grouped as $glId => $group):
   $unassigned = count(array_filter($group['sections'], fn($s) => !$s['adviser_id']));
 ?>
-<details class="group bg-white border border-slate-200 rounded-xl shadow-sm mb-3 overflow-hidden searchable-item" data-search="<?= h($group['name']) ?>" open>
-  <summary class="cursor-pointer select-none list-none px-4 py-3 flex items-center justify-between bg-slate-50 hover:bg-slate-100">
+<details class="group bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm mb-3 overflow-hidden searchable-item" data-search="<?= h($group['name']) ?>" open>
+  <summary class="cursor-pointer select-none list-none px-4 py-3 flex items-center justify-between bg-slate-50 dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-700">
     <span class="flex items-center gap-2">
-      <span class="text-slate-400 transition-transform group-open:rotate-90"><?= icon_svg('chevron-right', 'w-4 h-4') ?></span>
-      <span class="font-medium text-slate-700"><?= h($group['name']) ?></span>
+      <span class="text-slate-400 dark:text-slate-500 transition-transform group-open:rotate-90"><?= icon_svg('chevron-right', 'w-4 h-4') ?></span>
+      <span class="font-medium text-slate-700 dark:text-slate-200"><?= h($group['name']) ?></span>
     </span>
-    <span class="text-xs text-slate-400">
+    <span class="text-xs text-slate-400 dark:text-slate-500">
       <?= count($group['sections']) ?> section<?= count($group['sections']) === 1 ? '' : 's' ?>
-      <?php if ($unassigned > 0): ?><span class="text-amber-600 font-medium">· <?= $unassigned ?> without adviser</span><?php endif; ?>
+      <?php if ($unassigned > 0): ?><span class="text-amber-600 dark:text-amber-400 font-medium">· <?= $unassigned ?> without adviser</span><?php endif; ?>
     </span>
   </summary>
   <table class="w-full text-sm">
-    <thead class="bg-slate-50 text-slate-500 text-xs uppercase border-t border-slate-200">
+    <thead class="bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 text-xs uppercase border-t border-slate-200 dark:border-slate-700">
       <tr><th class="text-left px-4 py-2">Section</th><th class="text-left px-4 py-2">Adviser</th><th class="text-left px-4 py-2">Status</th><th class="px-4 py-2"></th></tr>
     </thead>
-    <tbody class="divide-y divide-slate-100">
+    <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
       <?php foreach ($group['sections'] as $sec): ?>
       <tr>
-        <td class="px-4 py-3 font-medium"><?= h($sec['section_name']) ?><?php if ($sec['is_special_program']): ?> <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-violet-100 text-violet-700">Special Program</span><?php endif; ?></td>
+        <td class="px-4 py-3 font-medium"><?= h($sec['section_name']) ?><?php if ($sec['is_special_program']): ?> <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300">Special Program</span><?php endif; ?></td>
         <td class="px-4 py-3">
           <form method="post">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="set_adviser">
             <input type="hidden" name="id" value="<?= (int) $sec['id'] ?>">
             <input type="hidden" name="school_year_id" value="<?= $filterYearId ?>">
-            <select name="adviser_id" onchange="this.form.submit()" class="px-2 py-1.5 border border-slate-300 rounded-lg text-sm max-w-[220px] <?= !$sec['adviser_id'] ? 'text-amber-600 border-amber-300' : '' ?>">
+            <select name="adviser_id" onchange="this.form.submit()" class="px-2 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm max-w-[220px] <?= !$sec['adviser_id'] ? 'text-amber-600 dark:text-amber-400 border-amber-300 dark:border-amber-700' : '' ?>">
               <option value="">Unassigned</option>
               <?= select_options(available_advisers($advisers, $takenAdviserIds, $sec['adviser_id'] ? (int) $sec['adviser_id'] : null), 'id', 'full_name', $sec['adviser_id']) ?>
             </select>
           </form>
         </td>
-        <td class="px-4 py-3"><?= $sec['is_active'] ? '<span class="text-emerald-600">Active</span>' : '<span class="text-slate-400">Inactive</span>' ?></td>
+        <td class="px-4 py-3"><?= $sec['is_active'] ? '<span class="text-emerald-600 dark:text-emerald-400">Active</span>' : '<span class="text-slate-400 dark:text-slate-500">Inactive</span>' ?></td>
         <td class="px-4 py-3 text-right space-x-2 whitespace-nowrap">
-          <a href="<?= h(url('/admin/sections.php?edit=' . $sec['id'])) ?>" class="text-accent-600 hover:underline">Edit</a>
+          <a href="<?= h(url('/admin/sections.php?edit=' . $sec['id'])) ?>" class="text-accent-600 dark:text-accent-400 hover:underline">Edit</a>
           <form method="post" class="inline">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="toggle_active">
             <input type="hidden" name="id" value="<?= (int) $sec['id'] ?>">
-            <button type="submit" class="text-slate-500 hover:underline"><?= $sec['is_active'] ? 'Deactivate' : 'Activate' ?></button>
+            <button type="submit" class="text-slate-500 dark:text-slate-400 hover:underline"><?= $sec['is_active'] ? 'Deactivate' : 'Activate' ?></button>
           </form>
         </td>
       </tr>
@@ -210,6 +210,6 @@ render_header('Sections');
 </details>
 <?php endforeach; ?>
 <?php if (!$sections): ?>
-<div class="bg-white border border-slate-200 rounded-xl shadow-sm px-4 py-6 text-center text-slate-400 text-sm">No sections for this school year yet.</div>
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm px-4 py-6 text-center text-slate-400 dark:text-slate-500 text-sm">No sections for this school year yet.</div>
 <?php endif; ?>
 <?php render_footer(); ?>

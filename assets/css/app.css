@@ -52,6 +52,16 @@ html.dark .js-just-pasted {
 }
 
 .slip {
+  /* A Card Slip represents a physical printed document — it has no dark "version" any more
+     than a real paper slip would, so it's forced to its own light appearance regardless of
+     the app's dark mode. Without this, .slip had no background of its own and just showed
+     through to whatever the page behind it was (near-black in dark mode), while its text kept
+     the muted greys tuned for a white background — unreadably low-contrast. color-scheme:
+     light keeps any native form control here (there are none today) from following dark mode
+     too, for the same reason. */
+  color-scheme: light;
+  background: #fff;
+  color: #1e293b;
   border: 1px dashed #94a3b8;
   border-radius: 6px;
   padding: 6mm;

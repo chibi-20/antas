@@ -31,56 +31,56 @@ render_header('Log in');
     <div class="flex items-center gap-3">
       <div class="w-11 h-11 rounded-xl bg-accent-600 text-white flex items-center justify-center shadow-sm"><?= icon_svg('graduation-cap', 'w-6 h-6') ?></div>
       <div>
-        <div class="font-semibold text-accent-700 text-lg leading-tight">TAPAT</div>
-        <div class="text-xs text-slate-500">Grade Consolidation System</div>
+        <div class="font-semibold text-accent-700 dark:text-accent-300 text-lg leading-tight">TAPAT</div>
+        <div class="text-xs text-slate-500 dark:text-slate-400">Grade Consolidation System</div>
       </div>
     </div>
 
     <div class="max-w-md">
-      <div class="text-5xl font-bold text-accent-700 tracking-tight mb-3">TAPAT</div>
-      <div class="text-2xl font-semibold text-slate-700 mb-4">Grade Consolidation System</div>
-      <p class="text-slate-500">Streamline grade consolidation, ensure accuracy, and support student success.</p>
+      <div class="text-5xl font-bold text-accent-700 dark:text-accent-300 tracking-tight mb-3">TAPAT</div>
+      <div class="text-2xl font-semibold text-slate-700 dark:text-slate-200 mb-4">Grade Consolidation System</div>
+      <p class="text-slate-500 dark:text-slate-400">Streamline grade consolidation, ensure accuracy, and support student success.</p>
     </div>
 
-    <div class="flex items-center gap-3 bg-white/80 backdrop-blur border border-white rounded-xl shadow-sm px-4 py-3 max-w-md">
-      <div class="w-9 h-9 rounded-lg bg-accent-100 text-accent-700 flex items-center justify-center flex-shrink-0"><?= icon_svg('shield', 'w-4 h-4') ?></div>
+    <div class="flex items-center gap-3 bg-white dark:bg-slate-800/80 backdrop-blur border border-white rounded-xl shadow-sm px-4 py-3 max-w-md">
+      <div class="w-9 h-9 rounded-lg bg-accent-100 dark:bg-accent-900/40 text-accent-700 dark:text-accent-300 flex items-center justify-center flex-shrink-0"><?= icon_svg('shield', 'w-4 h-4') ?></div>
       <div>
-        <div class="text-sm font-medium text-slate-700">Secure access to your school data</div>
-        <div class="text-xs text-slate-500">Your information is protected with role-based access control.</div>
+        <div class="text-sm font-medium text-slate-700 dark:text-slate-200">Secure access to your school data</div>
+        <div class="text-xs text-slate-500 dark:text-slate-400">Your information is protected with role-based access control.</div>
       </div>
     </div>
 
-    <div class="absolute -bottom-24 -right-24 w-72 h-72 rounded-full bg-accent-100/60"></div>
-    <div class="absolute top-1/3 -left-16 w-40 h-40 rounded-full bg-accent-100/40"></div>
+    <div class="absolute -bottom-24 -right-24 w-72 h-72 rounded-full bg-accent-100/60 dark:bg-accent-900/40"></div>
+    <div class="absolute top-1/3 -left-16 w-40 h-40 rounded-full bg-accent-100/40 dark:bg-accent-900/30"></div>
   </div>
 
-  <div class="flex items-center justify-center px-6 py-16 bg-slate-50">
+  <div class="flex items-center justify-center px-6 py-16 bg-slate-50 dark:bg-slate-900">
     <div class="w-full max-w-sm">
       <div class="flex flex-col items-center text-center mb-6">
         <div class="w-14 h-14 rounded-full bg-accent-600 text-white flex items-center justify-center mb-4 shadow-sm"><?= icon_svg('graduation-cap', 'w-7 h-7') ?></div>
-        <h1 class="text-2xl font-semibold text-slate-800">Welcome back</h1>
-        <p class="text-sm text-slate-500 mt-1">Please sign in to continue to TAPAT</p>
+        <h1 class="text-2xl font-semibold text-slate-800 dark:text-slate-100">Welcome back</h1>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Please sign in to continue to TAPAT</p>
       </div>
 
-      <div class="bg-white border border-slate-200 rounded-2xl shadow-sm p-8">
+      <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-sm p-8">
         <?php if ($error): ?>
-          <div class="mb-4 px-4 py-3 rounded-lg text-sm bg-rose-50 text-rose-700 border border-rose-200"><?= htmlspecialchars($error) ?></div>
+          <div class="mb-4 px-4 py-3 rounded-lg text-sm bg-rose-50 dark:bg-rose-900/30 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800"><?= htmlspecialchars($error) ?></div>
         <?php endif; ?>
         <form method="post">
           <?= csrf_field() ?>
           <input type="hidden" name="redirect" value="<?= htmlspecialchars($redirectTo) ?>">
 
-          <label class="block text-sm font-medium text-slate-600 mb-1">Username</label>
+          <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Username</label>
           <div class="relative mb-4">
-            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"><?= icon_svg('students', 'w-4 h-4') ?></span>
-            <input type="text" name="username" required autofocus placeholder="Enter your username" class="w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-500">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"><?= icon_svg('students', 'w-4 h-4') ?></span>
+            <input type="text" name="username" required autofocus placeholder="Enter your username" class="w-full pl-10 pr-3 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-500">
           </div>
 
-          <label class="block text-sm font-medium text-slate-600 mb-1">Password</label>
+          <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Password</label>
           <div class="relative mb-6">
-            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"><?= icon_svg('lock', 'w-4 h-4') ?></span>
-            <input type="password" name="password" id="login-password" required placeholder="Enter your password" class="w-full pl-10 pr-10 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-500">
-            <button type="button" id="toggle-password" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600" aria-label="Show password"><?= icon_svg('eye', 'w-4 h-4') ?></button>
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"><?= icon_svg('lock', 'w-4 h-4') ?></span>
+            <input type="password" name="password" id="login-password" required placeholder="Enter your password" class="w-full pl-10 pr-10 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-accent-500">
+            <button type="button" id="toggle-password" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300" aria-label="Show password"><?= icon_svg('eye', 'w-4 h-4') ?></button>
           </div>
 
           <button type="submit" class="w-full bg-accent-600 hover:bg-accent-700 text-white font-medium py-2.5 rounded-lg flex items-center justify-center gap-2">
@@ -89,7 +89,7 @@ render_header('Log in');
         </form>
       </div>
 
-      <p class="text-center text-xs text-slate-400 mt-6">Need help? Contact your system administrator for assistance.</p>
+      <p class="text-center text-xs text-slate-400 dark:text-slate-500 mt-6">Need help? Contact your system administrator for assistance.</p>
     </div>
   </div>
 </div>

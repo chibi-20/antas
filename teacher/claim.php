@@ -128,7 +128,7 @@ function render_claim_panel(array $bucket, int $sectionId, int $subjectId, int $
           <input type="hidden" name="subject_id" value="<?= $subjectId ?>">
           <input type="hidden" name="term_scope" value="<?= $termScope ?>">
           <input type="hidden" name="sex_scope" value="<?= $val ?>">
-          <button type="submit" class="text-xs bg-white border border-accent-200 text-accent-700 hover:bg-accent-50 rounded px-2 py-1"><?= h($label) ?></button>
+          <button type="submit" class="text-xs bg-white dark:bg-slate-800 border border-accent-200 text-accent-700 dark:text-accent-300 hover:bg-accent-50 dark:hover:bg-accent-900/30 rounded px-2 py-1"><?= h($label) ?></button>
         </form>
         <?php endif; ?>
       <?php endforeach; ?>
@@ -136,11 +136,11 @@ function render_claim_panel(array $bucket, int $sectionId, int $subjectId, int $
       <button type="button" data-mix-modal-target="<?= h($domId) ?>" class="text-xs bg-slate-800 hover:bg-slate-900 text-white rounded px-2 py-1">Pick Specific Students…</button>
       <?php endif; ?>
       <?php if (!$bucket['quick_open'] && !$bucket['mix_available']): ?>
-      <span class="text-[11px] text-slate-400">Fully covered</span>
+      <span class="text-[11px] text-slate-400 dark:text-slate-500">Fully covered</span>
       <?php endif; ?>
     </div>
     <?php if ($bucket['covered_by']): ?>
-    <div class="text-[11px] text-slate-400 mt-1.5">
+    <div class="text-[11px] text-slate-400 dark:text-slate-500 mt-1.5">
       <?php $names = array_unique(array_values($bucket['covered_by'])); ?>
       Already covered by <?= h(implode(', ', $names)) ?>
     </div>
@@ -148,20 +148,20 @@ function render_claim_panel(array $bucket, int $sectionId, int $subjectId, int $
 
     <?php if ($bucket['mix_available']): ?>
     <div id="<?= h($domId) ?>" class="fixed inset-0 z-50 hidden flex items-center justify-center bg-slate-900/50 p-4" data-mix-modal>
-      <div class="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[85vh] overflow-y-auto">
+      <div class="bg-white dark:bg-slate-800 rounded-xl shadow-xl max-w-md w-full max-h-[85vh] overflow-y-auto">
         <form method="post" class="p-5">
           <?= csrf_field() ?>
           <input type="hidden" name="section_id" value="<?= $sectionId ?>">
           <input type="hidden" name="subject_id" value="<?= $subjectId ?>">
           <input type="hidden" name="term_scope" value="<?= $termScope ?>">
           <input type="hidden" name="sex_scope" value="MIX">
-          <h3 class="text-sm font-semibold text-slate-700 mb-3">Pick your students</h3>
-          <div class="border border-slate-200 rounded-lg p-2">
+          <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">Pick your students</h3>
+          <div class="border border-slate-200 dark:border-slate-700 rounded-lg p-2">
             <?= render_student_picker($roster, $bucket['covered_by'], [], 'student_ids') ?>
           </div>
           <div class="flex gap-2 mt-4">
             <button type="submit" class="bg-accent-600 hover:bg-accent-700 text-white text-sm font-medium px-4 py-2 rounded-lg">Claim Selected</button>
-            <button type="button" data-mix-modal-close class="px-4 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-100">Cancel</button>
+            <button type="button" data-mix-modal-close class="px-4 py-2 rounded-lg text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">Cancel</button>
           </div>
         </form>
       </div>
@@ -174,18 +174,18 @@ function render_claim_panel(array $bucket, int $sectionId, int $subjectId, int $
 render_header('Claim a Class', 'Pick a section, term, and student group to make it yours.');
 ?>
 <?php if (!$groups): ?>
-<div class="bg-white border border-slate-200 rounded-xl shadow-sm px-4 py-10 text-center text-slate-400 text-sm">
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm px-4 py-10 text-center text-slate-400 dark:text-slate-500 text-sm">
   You haven't been tagged as eligible to self-claim any classes yet — ask an admin to set this up.
 </div>
 <?php endif; ?>
 
 <?php foreach ($groups as $group): ?>
 <div class="mb-8">
-  <h2 class="text-sm font-semibold text-slate-700 mb-1"><?= h($group['subject_name']) ?></h2>
-  <p class="text-xs text-slate-400 mb-3"><?= h($group['grade_level']) ?></p>
+  <h2 class="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-1"><?= h($group['subject_name']) ?></h2>
+  <p class="text-xs text-slate-400 dark:text-slate-500 mb-3"><?= h($group['grade_level']) ?></p>
 
   <?php if (!$group['sections']): ?>
-  <div class="text-slate-400 text-sm mb-4">No active sections in this grade level yet.</div>
+  <div class="text-slate-400 dark:text-slate-500 text-sm mb-4">No active sections in this grade level yet.</div>
   <?php endif; ?>
 
   <div class="grid gap-3">
@@ -196,8 +196,8 @@ render_header('Claim a Class', 'Pick a section, term, and student group to make 
         $roster = $rosterStmt->fetchAll();
         $modalPrefix = 'mix-' . $sec['section_id'] . '-' . $group['subject_id'];
     ?>
-    <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-4">
-      <div class="font-medium text-slate-800 mb-3"><?= h($sec['section_name']) ?></div>
+    <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-4">
+      <div class="font-medium text-slate-800 dark:text-slate-100 mb-3"><?= h($sec['section_name']) ?></div>
 
       <?php if ($avail['mode'] === 'whole_year'): ?>
         <?= render_claim_panel($avail['whole_year'], $sec['section_id'], $group['subject_id'], 0, $roster, $modalPrefix . '-year') ?>
@@ -205,15 +205,15 @@ render_header('Claim a Class', 'Pick a section, term, and student group to make 
       <?php elseif ($avail['mode'] === 'fresh'): ?>
         <div class="flex gap-1 mb-3" data-claim-mode-toggle="<?= h($modalPrefix) ?>">
           <button type="button" data-claim-mode-btn="<?= h($modalPrefix) ?>-year" class="px-3 py-1.5 rounded-lg text-xs bg-accent-600 text-white">Whole School Year</button>
-          <button type="button" data-claim-mode-btn="<?= h($modalPrefix) ?>-term" class="px-3 py-1.5 rounded-lg text-xs bg-white border border-slate-200 text-slate-600">By Term</button>
+          <button type="button" data-claim-mode-btn="<?= h($modalPrefix) ?>-term" class="px-3 py-1.5 rounded-lg text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300">By Term</button>
         </div>
         <div data-claim-mode-panel="<?= h($modalPrefix) ?>-year">
           <?= render_claim_panel($avail['whole_year'], $sec['section_id'], $group['subject_id'], 0, $roster, $modalPrefix . '-year') ?>
         </div>
         <div data-claim-mode-panel="<?= h($modalPrefix) ?>-term" class="hidden grid grid-cols-1 gap-2">
           <?php for ($t = 1; $t <= 3; $t++): ?>
-          <div class="bg-slate-50 rounded-lg p-2.5">
-            <div class="text-xs font-medium text-slate-500 mb-1.5">Term <?= $t ?></div>
+          <div class="bg-slate-50 dark:bg-slate-900 rounded-lg p-2.5">
+            <div class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">Term <?= $t ?></div>
             <?= render_claim_panel($avail['terms'][$t], $sec['section_id'], $group['subject_id'], $t, $roster, $modalPrefix . '-t' . $t) ?>
           </div>
           <?php endfor; ?>
@@ -223,13 +223,13 @@ render_header('Claim a Class', 'Pick a section, term, and student group to make 
         <div class="grid grid-cols-1 gap-2">
           <?php for ($t = 1; $t <= 3; $t++): $bucket = $avail['terms'][$t]; ?>
             <?php if (!$bucket['mix_available'] && !$bucket['quick_open']): ?>
-            <div class="bg-slate-50 rounded-lg p-2.5">
-              <div class="text-xs font-medium text-slate-500 mb-1">Term <?= $t ?></div>
-              <span class="text-[11px] text-slate-400">Fully covered<?php if ($bucket['covered_by']): ?> by <?= h(implode(', ', array_unique(array_values($bucket['covered_by'])))) ?><?php endif; ?></span>
+            <div class="bg-slate-50 dark:bg-slate-900 rounded-lg p-2.5">
+              <div class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Term <?= $t ?></div>
+              <span class="text-[11px] text-slate-400 dark:text-slate-500">Fully covered<?php if ($bucket['covered_by']): ?> by <?= h(implode(', ', array_unique(array_values($bucket['covered_by'])))) ?><?php endif; ?></span>
             </div>
             <?php else: ?>
-            <div class="bg-slate-50 rounded-lg p-2.5">
-              <div class="text-xs font-medium text-slate-500 mb-1.5">Term <?= $t ?></div>
+            <div class="bg-slate-50 dark:bg-slate-900 rounded-lg p-2.5">
+              <div class="text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5">Term <?= $t ?></div>
               <?= render_claim_panel($bucket, $sec['section_id'], $group['subject_id'], $t, $roster, $modalPrefix . '-t' . $t) ?>
             </div>
             <?php endif; ?>

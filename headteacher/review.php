@@ -276,13 +276,13 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
 ?>
 <div class="flex items-center justify-between mb-6">
   <div class="flex items-center gap-3">
-    <span class="text-sm text-slate-500">Term <?= $term ?> · Teacher: <?= h($assignment['teacher_name']) ?></span>
+    <span class="text-sm text-slate-500 dark:text-slate-400">Term <?= $term ?> · Teacher: <?= h($assignment['teacher_name']) ?></span>
     <?= status_badge($submission['status'] ?? 'not_started') ?>
   </div>
   <form method="get" class="flex gap-1">
     <input type="hidden" name="sst_id" value="<?= $sstId ?>">
     <?php for ($t = 1; $t <= 3; $t++): ?>
-      <button type="submit" name="term" value="<?= $t ?>" class="px-3 py-1.5 rounded-lg text-sm <?= $t === $term ? 'bg-accent-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50' ?>">Term <?= $t ?></button>
+      <button type="submit" name="term" value="<?= $t ?>" class="px-3 py-1.5 rounded-lg text-sm <?= $t === $term ? 'bg-accent-600 text-white' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700' ?>">Term <?= $t ?></button>
     <?php endfor; ?>
   </form>
 </div>
@@ -293,18 +293,18 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
   // teacher sees while filling it in, just read-only, so a Head Teacher reviewing it recognizes
   // it as "the class record" rather than a different-looking summary table.
   $componentBandClasses = [
-      'WW' => 'bg-violet-100 text-violet-700',
+      'WW' => 'bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300',
       'PT' => 'bg-teal-100 text-teal-700',
       'EX' => 'bg-orange-100 text-orange-700',
   ];
-  $headSticky = 'sticky z-20 bg-slate-50';
+  $headSticky = 'sticky z-20 bg-slate-50 dark:bg-slate-900';
 ?>
-<div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden mb-6">
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden mb-6">
   <div id="grid-scroll-bottom" class="overflow-auto max-h-[70vh]">
     <table class="text-sm min-w-full">
-      <thead class="text-slate-500 text-xs uppercase">
+      <thead class="text-slate-500 dark:text-slate-400 text-xs uppercase">
         <tr>
-          <th rowspan="2" class="text-left px-4 py-3 sticky left-0 top-0 z-30 bg-slate-50">Student</th>
+          <th rowspan="2" class="text-left px-4 py-3 sticky left-0 top-0 z-30 bg-slate-50 dark:bg-slate-900">Student</th>
           <?php foreach (['WW', 'PT', 'EX'] as $type): ?>
             <?php if (!$itemsByType[$type]) continue; ?>
             <th colspan="<?= count($itemsByType[$type]) ?>" class="h-8 text-center font-semibold normal-case <?= $headSticky ?> top-0 <?= $componentBandClasses[$type] ?>"><?= $componentLabels[$type] ?></th>
@@ -315,7 +315,7 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
           <th rowspan="2" class="text-center px-3 py-3 <?= $headSticky ?> top-0">Initial Grade</th>
           <th rowspan="2" class="text-center px-3 py-3 <?= $headSticky ?> top-0">Transmuted Grade</th>
           <?php if ($term === 3): ?>
-            <th rowspan="2" class="text-center px-3 py-3 whitespace-nowrap text-accent-600 <?= $headSticky ?> top-0">Final Grade</th>
+            <th rowspan="2" class="text-center px-3 py-3 whitespace-nowrap text-accent-600 dark:text-accent-400 <?= $headSticky ?> top-0">Final Grade</th>
           <?php endif; ?>
           <th rowspan="2" class="text-left px-3 py-3 <?= $headSticky ?> top-0">Reason (if below 75)</th>
         </tr>
@@ -324,17 +324,17 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
             <?php foreach ($itemsByType[$type] as $item): ?>
               <th class="text-center px-2 py-2 whitespace-nowrap font-semibold normal-case <?= $headSticky ?> top-8">
                 <?= h($item['item_name']) ?>
-                <div class="text-[10px] font-normal text-slate-400">/<?= rtrim(rtrim((string) $item['highest_possible_score'], '0'), '.') ?></div>
+                <div class="text-[10px] font-normal text-slate-400 dark:text-slate-500">/<?= rtrim(rtrim((string) $item['highest_possible_score'], '0'), '.') ?></div>
               </th>
             <?php endforeach; ?>
           <?php endforeach; ?>
         </tr>
       </thead>
-      <tbody class="divide-y divide-slate-100">
+      <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
         <?php $lastSex = null; foreach ($students as $student): ?>
         <?php if ($student['sex'] !== $lastSex): $lastSex = $student['sex']; ?>
         <tr>
-          <td colspan="99" class="px-4 py-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide bg-slate-50 sticky left-0 z-10"><?= $student['sex'] === 'M' ? 'Male' : 'Female' ?></td>
+          <td colspan="99" class="px-4 py-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide bg-slate-50 dark:bg-slate-900 sticky left-0 z-10"><?= $student['sex'] === 'M' ? 'Male' : 'Female' ?></td>
         </tr>
         <?php endif; ?>
         <?php
@@ -342,32 +342,32 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
             $grade = $gradeStmt->fetch();
         ?>
         <tr id="student-<?= (int) $student['id'] ?>">
-          <td class="px-4 py-2 font-medium whitespace-nowrap sticky left-0 z-10 bg-white"><?= h($student['full_name']) ?></td>
+          <td class="px-4 py-2 font-medium whitespace-nowrap sticky left-0 z-10 bg-white dark:bg-slate-800"><?= h($student['full_name']) ?></td>
           <?php foreach (['WW', 'PT', 'EX'] as $type): ?>
             <?php foreach ($itemsByType[$type] as $item): ?>
-              <td class="px-3 py-2 text-center text-slate-600"><?= h($scoreLookup[$item['id']][$student['id']] ?? '—') ?></td>
+              <td class="px-3 py-2 text-center text-slate-600 dark:text-slate-300"><?= h($scoreLookup[$item['id']][$student['id']] ?? '—') ?></td>
             <?php endforeach; ?>
           <?php endforeach; ?>
           <?php for ($t = 1; $t < $term; $t++): $pg = $priorGrades[$t][$student['id']] ?? null; ?>
-            <td class="px-3 py-2 text-center <?= $pg !== null ? grade_display_class((float) $pg) : 'text-slate-500' ?>"><?= $pg !== null ? h($pg) : '<span class="text-slate-300">—</span>' ?></td>
+            <td class="px-3 py-2 text-center <?= $pg !== null ? grade_display_class((float) $pg) : 'text-slate-500 dark:text-slate-400' ?>"><?= $pg !== null ? h($pg) : '<span class="text-slate-300 dark:text-slate-600">—</span>' ?></td>
           <?php endfor; ?>
-          <td class="px-3 py-2 text-center font-medium"><?= $grade && $grade['initial_grade'] !== null ? h($grade['initial_grade']) : '<span class="text-slate-300">—</span>' ?></td>
-          <td class="px-3 py-2 text-center font-semibold <?= $grade && $grade['transmuted_grade'] !== null ? (grade_display_class((float) $grade['transmuted_grade']) ?: 'text-accent-700') : 'text-accent-700' ?>"><?= $grade && $grade['transmuted_grade'] !== null ? h($grade['transmuted_grade']) : '<span class="text-slate-300">—</span>' ?></td>
+          <td class="px-3 py-2 text-center font-medium"><?= $grade && $grade['initial_grade'] !== null ? h($grade['initial_grade']) : '<span class="text-slate-300 dark:text-slate-600">—</span>' ?></td>
+          <td class="px-3 py-2 text-center font-semibold <?= $grade && $grade['transmuted_grade'] !== null ? (grade_display_class((float) $grade['transmuted_grade']) ?: 'text-accent-700 dark:text-accent-300') : 'text-accent-700 dark:text-accent-300' ?>"><?= $grade && $grade['transmuted_grade'] !== null ? h($grade['transmuted_grade']) : '<span class="text-slate-300 dark:text-slate-600">—</span>' ?></td>
           <?php if ($term === 3): $fg = $finalGrades[$student['id']] ?? null; ?>
-            <td class="px-3 py-2 text-center font-semibold <?= $fg !== null ? (grade_display_class((float) $fg) ?: 'text-accent-700') : 'text-accent-700' ?>"><?= $fg !== null ? h($fg) : '—' ?></td>
+            <td class="px-3 py-2 text-center font-semibold <?= $fg !== null ? (grade_display_class((float) $fg) ?: 'text-accent-700 dark:text-accent-300') : 'text-accent-700 dark:text-accent-300' ?>"><?= $fg !== null ? h($fg) : '—' ?></td>
           <?php endif; ?>
-          <td class="px-3 py-2 text-left text-xs text-slate-500 max-w-[220px]">
+          <td class="px-3 py-2 text-left text-xs text-slate-500 dark:text-slate-400 max-w-[220px]">
             <?php $reason = $failReasons[$student['id']] ?? null; ?>
             <?php if ($grade && $grade['transmuted_grade'] !== null && (float) $grade['transmuted_grade'] < 75): ?>
-              <?= $reason !== null ? h($reason) : '<span class="text-amber-500 italic">Not yet given</span>' ?>
+              <?= $reason !== null ? h($reason) : '<span class="text-amber-500 dark:text-amber-400 italic">Not yet given</span>' ?>
             <?php else: ?>
-              <span class="text-slate-300">—</span>
+              <span class="text-slate-300 dark:text-slate-600">—</span>
             <?php endif; ?>
           </td>
         </tr>
         <?php endforeach; ?>
         <?php if (!$students): ?>
-        <tr><td colspan="99" class="px-4 py-6 text-center text-slate-400">No students in this section yet.</td></tr>
+        <tr><td colspan="99" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500">No students in this section yet.</td></tr>
         <?php endif; ?>
       </tbody>
     </table>
@@ -388,16 +388,16 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
     <input type="hidden" name="action" value="return">
     <input type="hidden" name="sst_id" value="<?= $sstId ?>">
     <input type="hidden" name="term" value="<?= $term ?>">
-    <textarea name="revision_comment" required placeholder="Explain what needs to be fixed…" class="w-full mb-2 px-3 py-2 border border-slate-300 rounded-lg text-sm" rows="2"></textarea>
+    <textarea name="revision_comment" required placeholder="Explain what needs to be fixed…" class="w-full mb-2 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm" rows="2"></textarea>
     <button type="submit" class="bg-rose-600 hover:bg-rose-700 text-white font-medium px-5 py-2.5 rounded-lg text-sm">Return for Revision</button>
   </form>
 </div>
 <?php elseif ($submission && $submission['status'] === 'published'): ?>
-<p class="text-sm text-emerald-700 mb-4">Published on <?= h($submission['reviewed_at']) ?>.</p>
+<p class="text-sm text-emerald-700 dark:text-emerald-300 mb-4">Published on <?= h($submission['reviewed_at']) ?>.</p>
 <?php if ($pendingEditRequest): ?>
-<div class="bg-amber-50 border border-amber-200 rounded-xl p-5 max-w-lg">
-  <h2 class="text-sm font-semibold text-amber-800 mb-1">Edit request from <?= h($assignment['teacher_name']) ?></h2>
-  <p class="text-sm text-amber-700 mb-4">Reason: <?= h($pendingEditRequest['reason']) ?></p>
+<div class="bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-xl p-5 max-w-lg">
+  <h2 class="text-sm font-semibold text-amber-800 dark:text-amber-300 mb-1">Edit request from <?= h($assignment['teacher_name']) ?></h2>
+  <p class="text-sm text-amber-700 dark:text-amber-300 mb-4">Reason: <?= h($pendingEditRequest['reason']) ?></p>
   <div class="flex gap-3 items-start">
     <form method="post" data-confirm="Approve this edit request? The term will reopen for editing.">
       <?= csrf_field() ?>
@@ -413,14 +413,14 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
       <input type="hidden" name="edit_request_id" value="<?= (int) $pendingEditRequest['id'] ?>">
       <input type="hidden" name="sst_id" value="<?= $sstId ?>">
       <input type="hidden" name="term" value="<?= $term ?>">
-      <textarea name="review_comment" required placeholder="Explain why this is being rejected…" class="w-full mb-2 px-3 py-2 border border-slate-300 rounded-lg text-sm" rows="2"></textarea>
+      <textarea name="review_comment" required placeholder="Explain why this is being rejected…" class="w-full mb-2 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm" rows="2"></textarea>
       <button type="submit" class="bg-rose-600 hover:bg-rose-700 text-white font-medium px-4 py-2 rounded-lg text-sm">Reject</button>
     </form>
   </div>
 </div>
 <?php endif; ?>
 <?php else: ?>
-<p class="text-sm text-slate-400">This term has not been submitted for review yet.</p>
+<p class="text-sm text-slate-400 dark:text-slate-500">This term has not been submitted for review yet.</p>
 <?php endif; ?>
 <script>
 window.addEventListener('DOMContentLoaded', function () {

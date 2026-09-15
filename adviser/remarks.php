@@ -83,28 +83,28 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
   <form method="get" class="flex gap-1">
     <input type="hidden" name="section_id" value="<?= $sectionId ?>">
     <?php for ($t = 1; $t <= 3; $t++): ?>
-      <button type="submit" name="term" value="<?= $t ?>" class="px-3 py-1.5 rounded-lg text-sm <?= $t === $term ? 'bg-accent-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50' ?>">Term <?= $t ?></button>
+      <button type="submit" name="term" value="<?= $t ?>" class="px-3 py-1.5 rounded-lg text-sm <?= $t === $term ? 'bg-accent-600 text-white' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700' ?>">Term <?= $t ?></button>
     <?php endfor; ?>
   </form>
-  <p class="text-xs text-slate-400">Optional per student — printed on Card Slips' 2-per-sheet layout.</p>
+  <p class="text-xs text-slate-400 dark:text-slate-500">Optional per student — printed on Card Slips' 2-per-sheet layout.</p>
 </div>
 
 <form method="post">
   <?= csrf_field() ?>
   <input type="hidden" name="section_id" value="<?= $sectionId ?>">
   <input type="hidden" name="term" value="<?= $term ?>">
-  <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-5 mb-4">
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-5 mb-4">
     <div class="space-y-3">
       <?php $lastSex = null; foreach ($students as $st): $existing = $existingByStudent[$st['id']] ?? null; ?>
       <?php if ($st['sex'] !== $lastSex): $lastSex = $st['sex']; ?>
-      <div class="text-xs font-semibold text-slate-500 uppercase tracking-wide pt-2 first:pt-0"><?= $st['sex'] === 'M' ? 'Male' : 'Female' ?></div>
+      <div class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide pt-2 first:pt-0"><?= $st['sex'] === 'M' ? 'Male' : 'Female' ?></div>
       <?php endif; ?>
-      <div class="flex flex-wrap items-start gap-3 pb-3 border-b border-slate-100 last:border-0 last:pb-0">
+      <div class="flex flex-wrap items-start gap-3 pb-3 border-b border-slate-100 dark:border-slate-700 last:border-0 last:pb-0">
         <div class="w-48 flex-shrink-0">
-          <div class="text-sm font-medium text-slate-700"><?= h($st['full_name']) ?></div>
+          <div class="text-sm font-medium text-slate-700 dark:text-slate-200"><?= h($st['full_name']) ?></div>
         </div>
         <div class="flex-1 min-w-[260px]">
-          <select name="remark_bank_id[<?= $st['id'] ?>]" class="js-remark-select w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" data-student-id="<?= $st['id'] ?>">
+          <select name="remark_bank_id[<?= $st['id'] ?>]" class="js-remark-select w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm" data-student-id="<?= $st['id'] ?>">
             <option value="">— No remark —</option>
             <?php foreach ($optionsByCategory as $cat => $opts): ?>
               <?php if (!$opts) continue; ?>
@@ -118,14 +118,14 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
           </select>
           <div class="js-remark-other-wrap mt-2 <?= ($existing && $existing['remark_bank_id'] === null) ? '' : 'hidden' ?>" data-other-for="<?= $st['id'] ?>">
             <textarea name="remark_other[<?= $st['id'] ?>]" placeholder="Specify…" rows="2" maxlength="255"
-              class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"><?= h(($existing && $existing['remark_bank_id'] === null) ? $existing['remark_text'] : '') ?></textarea>
-            <p class="text-xs text-slate-400 mt-1">Up to 255 characters — keeps it printable on the slip alongside a full roster of subjects.</p>
+              class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm"><?= h(($existing && $existing['remark_bank_id'] === null) ? $existing['remark_text'] : '') ?></textarea>
+            <p class="text-xs text-slate-400 dark:text-slate-500 mt-1">Up to 255 characters — keeps it printable on the slip alongside a full roster of subjects.</p>
           </div>
         </div>
       </div>
       <?php endforeach; ?>
       <?php if (!$students): ?>
-      <p class="text-sm text-slate-400">No students in this section yet.</p>
+      <p class="text-sm text-slate-400 dark:text-slate-500">No students in this section yet.</p>
       <?php endif; ?>
     </div>
   </div>

@@ -31,13 +31,13 @@ $stats = [
 
 function stat_card(string $label, int $value, string $icon, string $colorClasses, ?string $href = null): string
 {
-    $inner = '<div class="bg-white border border-slate-200 rounded-xl shadow-sm p-5 flex items-center gap-4 hover:shadow-md transition-shadow">
+    $inner = '<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-5 flex items-center gap-4 hover:shadow-md transition-shadow">
         <div class="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ' . $colorClasses . '">
           ' . icon_svg($icon, 'w-6 h-6') . '
         </div>
         <div>
-          <div class="text-2xl font-semibold text-slate-800">' . $value . '</div>
-          <div class="text-xs text-slate-500">' . h($label) . '</div>
+          <div class="text-2xl font-semibold text-slate-800 dark:text-slate-100">' . $value . '</div>
+          <div class="text-xs text-slate-500 dark:text-slate-400">' . h($label) . '</div>
         </div>
       </div>';
     return $href ? '<a href="' . h(url($href)) . '" class="block">' . $inner . '</a>' : $inner;
@@ -60,36 +60,36 @@ $quickLinks = [
 render_header('Dashboard', 'Overview of your school\'s grade consolidation setup.');
 ?>
 <?php if (!$year): ?>
-<div class="mb-6 px-4 py-3 rounded-lg text-sm bg-amber-50 text-amber-700 border border-amber-200">
+<div class="mb-6 px-4 py-3 rounded-lg text-sm bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
   No active school year is set. <a href="<?= h(url('/admin/school_years.php')) ?>" class="underline font-medium">Set one</a> to see section/student counts here.
 </div>
 <?php else: ?>
-<div class="mb-6 text-sm text-slate-500">Active school year: <span class="font-medium text-slate-700"><?= h($year['year_label']) ?></span></div>
+<div class="mb-6 text-sm text-slate-500 dark:text-slate-400">Active school year: <span class="font-medium text-slate-700 dark:text-slate-200"><?= h($year['year_label']) ?></span></div>
 <?php endif; ?>
 
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-  <?= stat_card('Students', $stats['students'], 'students', 'bg-violet-100 text-violet-600', '/admin/students.php') ?>
-  <?= stat_card('Sections', $stats['sections'], 'sections', 'bg-blue-100 text-blue-600', '/admin/sections.php') ?>
+  <?= stat_card('Students', $stats['students'], 'students', 'bg-violet-100 dark:bg-violet-900/40 text-violet-600', '/admin/students.php') ?>
+  <?= stat_card('Sections', $stats['sections'], 'sections', 'bg-blue-100 dark:bg-blue-900/40 text-blue-600', '/admin/sections.php') ?>
   <?= stat_card('Subjects', $stats['subjects'], 'subjects', 'bg-purple-100 text-purple-600', '/admin/subjects.php') ?>
-  <?= stat_card('Teachers', $stats['teachers'], 'teachers', 'bg-emerald-100 text-emerald-600', '/admin/users.php') ?>
+  <?= stat_card('Teachers', $stats['teachers'], 'teachers', 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400', '/admin/users.php') ?>
   <?= stat_card('Also Head Teachers', $stats['head_teachers'], 'star', 'bg-indigo-100 text-indigo-600', '/admin/head_teachers.php') ?>
   <?= stat_card('Also Advisers', $stats['advisers'], 'teachers', 'bg-sky-100 text-sky-600', '/admin/sections.php') ?>
-  <?= stat_card('Awaiting Review', $stats['awaiting_review'], 'clock', 'bg-amber-100 text-amber-600') ?>
+  <?= stat_card('Awaiting Review', $stats['awaiting_review'], 'clock', 'bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400') ?>
   <?= stat_card('Published (this year)', $stats['published'], 'check', 'bg-teal-100 text-teal-600') ?>
 </div>
 
 <div class="flex items-center gap-2 mb-3">
-  <?= icon_svg('arrow-right', 'w-4 h-4 text-accent-600') ?>
-  <h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wide">Quick Links</h2>
+  <?= icon_svg('arrow-right', 'w-4 h-4 text-accent-600 dark:text-accent-400') ?>
+  <h2 class="text-sm font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Quick Links</h2>
 </div>
 <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
   <?php foreach ($quickLinks as $link): ?>
-    <a href="<?= h(url($link['href'])) ?>" data-search="<?= h($link['label']) ?>" class="searchable-item flex items-center justify-between gap-3 bg-white border border-slate-200 rounded-xl p-4 hover:border-accent-300 hover:bg-accent-50 transition-colors">
+    <a href="<?= h(url($link['href'])) ?>" data-search="<?= h($link['label']) ?>" class="searchable-item flex items-center justify-between gap-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 hover:border-accent-300 hover:bg-accent-50 dark:hover:bg-accent-900/30 transition-colors">
       <span class="flex items-center gap-3">
-        <span class="w-9 h-9 rounded-lg bg-accent-50 flex items-center justify-center flex-shrink-0"><?= icon_svg($link['icon'], 'w-4 h-4 text-accent-600') ?></span>
-        <span class="text-sm font-medium text-slate-700"><?= h($link['label']) ?></span>
+        <span class="w-9 h-9 rounded-lg bg-accent-50 dark:bg-accent-900/30 flex items-center justify-center flex-shrink-0"><?= icon_svg($link['icon'], 'w-4 h-4 text-accent-600 dark:text-accent-400') ?></span>
+        <span class="text-sm font-medium text-slate-700 dark:text-slate-200"><?= h($link['label']) ?></span>
       </span>
-      <?= icon_svg('chevron-right', 'w-4 h-4 text-slate-300') ?>
+      <?= icon_svg('chevron-right', 'w-4 h-4 text-slate-300 dark:text-slate-600') ?>
     </a>
   <?php endforeach; ?>
 </div>

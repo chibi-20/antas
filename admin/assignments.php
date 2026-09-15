@@ -338,44 +338,44 @@ render_header('Subject Assignments');
 </a>
 
 <details class="mb-6" <?= $editing ? 'open' : '' ?>>
-  <summary class="cursor-pointer select-none text-sm text-slate-500 hover:text-slate-700 mb-2"><?= $editing ? 'Edit Assignment' : 'Or add a single assignment manually' ?></summary>
-  <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6 max-w-lg mt-2">
+  <summary class="cursor-pointer select-none text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 mb-2"><?= $editing ? 'Edit Assignment' : 'Or add a single assignment manually' ?></summary>
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-6 max-w-lg mt-2">
     <form method="post">
       <?= csrf_field() ?>
       <input type="hidden" name="action" value="<?= $editing ? 'update' : 'create' ?>">
       <?php if ($editing): ?><input type="hidden" name="id" value="<?= (int) $editing['id'] ?>"><?php endif; ?>
-      <label class="block text-sm font-medium text-slate-600 mb-1">School year</label>
-      <select name="school_year_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+      <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">School year</label>
+      <select name="school_year_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
         <?= select_options($schoolYears, 'id', 'year_label', $editing['school_year_id'] ?? (active_school_year()['id'] ?? null)) ?>
       </select>
-      <label class="block text-sm font-medium text-slate-600 mb-1">Section</label>
+      <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Section</label>
       <?php $curSectionId = (string) ($editing['section_id'] ?? ''); ?>
-      <select name="section_id" required data-special-target="assignment-major-field" class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+      <select name="section_id" required data-special-target="assignment-major-field" class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
         <?php foreach ($sectionLabels as $sl): ?>
           <option value="<?= h($sl['id']) ?>" data-special="<?= $sl['is_special_program'] ?>" <?= (string) $sl['id'] === $curSectionId ? 'selected' : '' ?>><?= h($sl['label']) ?></option>
         <?php endforeach; ?>
       </select>
-      <label class="block text-sm font-medium text-slate-600 mb-1">Subject</label>
-      <select name="subject_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+      <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Subject</label>
+      <select name="subject_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
         <?= select_options($subjects, 'id', 'subject_name', $editing['subject_id'] ?? null) ?>
       </select>
-      <label class="block text-sm font-medium text-slate-600 mb-1">Teacher</label>
-      <select name="teacher_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg js-searchable" data-placeholder="Search teachers…">
+      <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Teacher</label>
+      <select name="teacher_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg js-searchable" data-placeholder="Search teachers…">
         <?= select_options($teachers, 'id', 'full_name', $editing['teacher_id'] ?? null) ?>
       </select>
       <div id="assignment-major-field" hidden class="mb-4">
-        <label class="block text-sm font-medium text-slate-600 mb-1">Major</label>
-        <select name="major_id" data-major-select="#assignment-sex-scope" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+        <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Major</label>
+        <select name="major_id" data-major-select="#assignment-sex-scope" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
           <option value="">Not major-specific</option>
           <?= select_options($majors, 'id', 'major_name', $editing['major_id'] ?? null) ?>
         </select>
-        <p class="text-xs text-slate-400 mt-1">Special Program section only — restricts this subject to students of the chosen major, so several teachers can each cover one major of the same subject/section. Leave blank for a subject every student in this section takes.</p>
+        <p class="text-xs text-slate-400 dark:text-slate-500 mt-1">Special Program section only — restricts this subject to students of the chosen major, so several teachers can each cover one major of the same subject/section. Leave blank for a subject every student in this section takes.</p>
       </div>
       <div class="grid grid-cols-2 gap-3 mb-4">
         <div>
-          <label class="block text-sm font-medium text-slate-600 mb-1">Term</label>
+          <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Term</label>
           <?php $curTermScope = (int) ($editing['term_scope'] ?? 0); ?>
-          <select name="term_scope" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+          <select name="term_scope" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
             <option value="0" <?= $curTermScope === 0 ? 'selected' : '' ?>>All Terms (default)</option>
             <option value="1" <?= $curTermScope === 1 ? 'selected' : '' ?>>Term 1</option>
             <option value="2" <?= $curTermScope === 2 ? 'selected' : '' ?>>Term 2</option>
@@ -383,9 +383,9 @@ render_header('Subject Assignments');
           </select>
         </div>
         <div>
-          <label class="block text-sm font-medium text-slate-600 mb-1">Applies To</label>
+          <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Applies To</label>
           <?php $curSexScope = $editing['sex_scope'] ?? 'ALL'; ?>
-          <select name="sex_scope" id="assignment-sex-scope" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+          <select name="sex_scope" id="assignment-sex-scope" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
             <option value="ALL" <?= $curSexScope === 'ALL' ? 'selected' : '' ?>>All Students</option>
             <option value="M" <?= $curSexScope === 'M' ? 'selected' : '' ?>>Male Only</option>
             <option value="F" <?= $curSexScope === 'F' ? 'selected' : '' ?>>Female Only</option>
@@ -394,16 +394,16 @@ render_header('Subject Assignments');
         </div>
       </div>
       <?php if ($editing && $editing['sex_scope'] === 'MIX'): ?>
-      <label class="block text-sm font-medium text-slate-600 mb-1">Students</label>
-      <div class="border border-slate-200 rounded-lg p-2 mb-4 max-h-64 overflow-y-auto">
+      <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Students</label>
+      <div class="border border-slate-200 dark:border-slate-700 rounded-lg p-2 mb-4 max-h-64 overflow-y-auto">
         <?= render_student_picker($editingMixRoster, $editingMixCoveredBy, $editingMixCheckedIds, 'student_ids') ?>
       </div>
       <?php else: ?>
-      <p class="text-xs text-slate-400 mb-4">Only needed when a subject changes teachers mid-year or is split by sex (e.g. TLE) — leave both at their defaults otherwise. To create a new Mix (specific-students) assignment, use "Or create a Mix assignment" below — this form can't switch an existing row to Mix.</p>
+      <p class="text-xs text-slate-400 dark:text-slate-500 mb-4">Only needed when a subject changes teachers mid-year or is split by sex (e.g. TLE) — leave both at their defaults otherwise. To create a new Mix (specific-students) assignment, use "Or create a Mix assignment" below — this form can't switch an existing row to Mix.</p>
       <?php endif; ?>
       <div class="flex gap-2">
         <button type="submit" class="bg-accent-600 hover:bg-accent-700 text-white font-medium px-4 py-2 rounded-lg text-sm"><?= $editing ? 'Save Changes' : 'Add' ?></button>
-        <?php if ($editing): ?><a href="<?= h(url('/admin/assignments.php')) ?>" class="px-4 py-2 rounded-lg text-sm text-slate-600 hover:bg-slate-100">Cancel</a><?php endif; ?>
+        <?php if ($editing): ?><a href="<?= h(url('/admin/assignments.php')) ?>" class="px-4 py-2 rounded-lg text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">Cancel</a><?php endif; ?>
       </div>
     </form>
   </div>
@@ -411,29 +411,29 @@ render_header('Subject Assignments');
 
 <?php if (!$editing): ?>
 <details class="mb-6" <?= $mixPreview ? 'open' : '' ?>>
-  <summary class="cursor-pointer select-none text-sm text-slate-500 hover:text-slate-700 mb-2">Or create a Mix (specific students) assignment</summary>
-  <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6 max-w-lg mt-2">
+  <summary class="cursor-pointer select-none text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 mb-2">Or create a Mix (specific students) assignment</summary>
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-6 max-w-lg mt-2">
     <?php if (!$mixPreview): ?>
-    <p class="text-xs text-slate-400 mb-4">For a teacher covering a hand-picked, mixed-sex subset of a section — not all students, and not cleanly "male only" or "female only". Pick the school year/section/subject/teacher/term first, then you'll choose exactly which students on the next step.</p>
+    <p class="text-xs text-slate-400 dark:text-slate-500 mb-4">For a teacher covering a hand-picked, mixed-sex subset of a section — not all students, and not cleanly "male only" or "female only". Pick the school year/section/subject/teacher/term first, then you'll choose exactly which students on the next step.</p>
     <form method="get">
-      <label class="block text-sm font-medium text-slate-600 mb-1">School year</label>
-      <select name="pv_school_year_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+      <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">School year</label>
+      <select name="pv_school_year_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
         <?= select_options($schoolYears, 'id', 'year_label', active_school_year()['id'] ?? null) ?>
       </select>
-      <label class="block text-sm font-medium text-slate-600 mb-1">Section</label>
-      <select name="pv_section_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+      <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Section</label>
+      <select name="pv_section_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
         <?= select_options($sectionLabels, 'id', 'label', null) ?>
       </select>
-      <label class="block text-sm font-medium text-slate-600 mb-1">Subject</label>
-      <select name="pv_subject_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+      <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Subject</label>
+      <select name="pv_subject_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
         <?= select_options($subjects, 'id', 'subject_name', null) ?>
       </select>
-      <label class="block text-sm font-medium text-slate-600 mb-1">Teacher</label>
-      <select name="pv_teacher_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg js-searchable" data-placeholder="Search teachers…">
+      <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Teacher</label>
+      <select name="pv_teacher_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg js-searchable" data-placeholder="Search teachers…">
         <?= select_options($teachers, 'id', 'full_name', null) ?>
       </select>
-      <label class="block text-sm font-medium text-slate-600 mb-1">Term</label>
-      <select name="pv_term_scope" class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+      <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Term</label>
+      <select name="pv_term_scope" class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
         <option value="0">All Terms (default)</option>
         <option value="1">Term 1</option>
         <option value="2">Term 2</option>
@@ -443,7 +443,7 @@ render_header('Subject Assignments');
     </form>
     <?php else: ?>
     <?php if (!$mixPreview['bucket']['mix_available']): ?>
-    <p class="text-sm text-rose-600 mb-4">Every student in this section is already covered for this term — nothing left to pick.</p>
+    <p class="text-sm text-rose-600 dark:text-rose-400 mb-4">Every student in this section is already covered for this term — nothing left to pick.</p>
     <?php else: ?>
     <form method="post">
       <?= csrf_field() ?>
@@ -454,40 +454,40 @@ render_header('Subject Assignments');
       <input type="hidden" name="teacher_id" value="<?= $mixPreview['teacher_id'] ?>">
       <input type="hidden" name="term_scope" value="<?= $mixPreview['term_scope'] ?>">
       <input type="hidden" name="sex_scope" value="MIX">
-      <label class="block text-sm font-medium text-slate-600 mb-1">Students</label>
-      <div class="border border-slate-200 rounded-lg p-2 mb-4 max-h-64 overflow-y-auto">
+      <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Students</label>
+      <div class="border border-slate-200 dark:border-slate-700 rounded-lg p-2 mb-4 max-h-64 overflow-y-auto">
         <?= render_student_picker($mixPreview['roster'], $mixPreview['bucket']['covered_by'], [], 'student_ids') ?>
       </div>
       <button type="submit" class="bg-accent-600 hover:bg-accent-700 text-white font-medium px-4 py-2 rounded-lg text-sm">Create Mix Assignment</button>
     </form>
     <?php endif; ?>
-    <a href="<?= h(url('/admin/assignments.php')) ?>" class="inline-block mt-3 text-xs text-slate-500 hover:underline">&larr; Start over</a>
+    <a href="<?= h(url('/admin/assignments.php')) ?>" class="inline-block mt-3 text-xs text-slate-500 dark:text-slate-400 hover:underline">&larr; Start over</a>
     <?php endif; ?>
   </div>
 </details>
 <?php endif; ?>
 
 <details class="mb-6">
-  <summary class="cursor-pointer select-none text-sm text-slate-500 hover:text-slate-700 mb-2">Or mark a teacher as eligible to self-claim classes</summary>
-  <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6 max-w-lg mt-2">
-    <p class="text-xs text-slate-400 mb-4">Lets a teacher pick their own sections/terms for this subject and grade level from their own dashboard, instead of you creating each assignment row yourself — useful for a subject like TLE that has many teachers split by term or by sex. This does not create an assignment by itself.</p>
+  <summary class="cursor-pointer select-none text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 mb-2">Or mark a teacher as eligible to self-claim classes</summary>
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-6 max-w-lg mt-2">
+    <p class="text-xs text-slate-400 dark:text-slate-500 mb-4">Lets a teacher pick their own sections/terms for this subject and grade level from their own dashboard, instead of you creating each assignment row yourself — useful for a subject like TLE that has many teachers split by term or by sex. This does not create an assignment by itself.</p>
     <form method="post">
       <?= csrf_field() ?>
       <input type="hidden" name="action" value="eligibility_create">
-      <label class="block text-sm font-medium text-slate-600 mb-1">Teacher</label>
-      <select name="teacher_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg js-searchable" data-placeholder="Search teachers…">
+      <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Teacher</label>
+      <select name="teacher_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg js-searchable" data-placeholder="Search teachers…">
         <?= select_options($teachers, 'id', 'full_name', null) ?>
       </select>
-      <label class="block text-sm font-medium text-slate-600 mb-1">Subject</label>
-      <select name="subject_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+      <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Subject</label>
+      <select name="subject_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
         <?= select_options($subjects, 'id', 'subject_name', null) ?>
       </select>
-      <label class="block text-sm font-medium text-slate-600 mb-1">Grade Level</label>
-      <select name="grade_level_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+      <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Grade Level</label>
+      <select name="grade_level_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
         <?= select_options($gradeLevels, 'id', 'name', null) ?>
       </select>
-      <label class="block text-sm font-medium text-slate-600 mb-1">School year</label>
-      <select name="school_year_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 rounded-lg">
+      <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">School year</label>
+      <select name="school_year_id" required class="w-full mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
         <?= select_options($schoolYears, 'id', 'year_label', active_school_year()['id'] ?? null) ?>
       </select>
       <button type="submit" class="bg-accent-600 hover:bg-accent-700 text-white font-medium px-4 py-2 rounded-lg text-sm">Add Eligibility</button>
@@ -496,13 +496,13 @@ render_header('Subject Assignments');
 </details>
 
 <details class="mb-6">
-  <summary class="cursor-pointer select-none text-sm text-slate-500 hover:text-slate-700 mb-2">Or find who's teaching a section</summary>
-  <div class="bg-white border border-slate-200 rounded-xl shadow-sm p-6 mt-2">
-    <p class="text-xs text-slate-400 mb-3">Every assignment across every teacher, searchable by section, subject, or teacher — useful for tracing a section that was self-claimed by the wrong teacher.</p>
-    <input type="text" id="section-lookup-search" placeholder="Search by section, subject, or teacher…" class="w-full max-w-sm mb-4 px-3 py-2 border border-slate-300 rounded-lg text-sm">
+  <summary class="cursor-pointer select-none text-sm text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 mb-2">Or find who's teaching a section</summary>
+  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-6 mt-2">
+    <p class="text-xs text-slate-400 dark:text-slate-500 mb-3">Every assignment across every teacher, searchable by section, subject, or teacher — useful for tracing a section that was self-claimed by the wrong teacher.</p>
+    <input type="text" id="section-lookup-search" placeholder="Search by section, subject, or teacher…" class="w-full max-w-sm mb-4 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm">
     <div class="overflow-x-auto">
       <table class="w-full text-sm">
-        <thead class="bg-slate-50 text-slate-500 text-xs uppercase">
+        <thead class="bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 text-xs uppercase">
           <tr>
             <th class="text-left px-4 py-3">Year</th>
             <th class="text-left px-4 py-3">Section</th>
@@ -514,15 +514,15 @@ render_header('Subject Assignments');
             <th class="text-left px-4 py-3">Status</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-slate-100">
+        <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
           <?php foreach ($assignments as $a): ?>
           <tr class="js-section-lookup-row" data-search="<?= h($a['grade_level'] . ' ' . $a['section_name'] . ' ' . $a['subject_name'] . ' ' . $a['teacher_name']) ?>">
-            <td class="px-4 py-3 text-slate-500"><?= h($a['year_label']) ?></td>
-            <td class="px-4 py-3 text-slate-600"><?= h($a['grade_level'] . ' - ' . $a['section_name']) ?></td>
+            <td class="px-4 py-3 text-slate-500 dark:text-slate-400"><?= h($a['year_label']) ?></td>
+            <td class="px-4 py-3 text-slate-600 dark:text-slate-300"><?= h($a['grade_level'] . ' - ' . $a['section_name']) ?></td>
             <td class="px-4 py-3 font-medium"><?= h($a['subject_name']) ?></td>
-            <td class="px-4 py-3"><a href="<?= h(url('/admin/assignments.php?teacher_id=' . $a['teacher_id'])) ?>" class="text-accent-600 hover:underline"><?= h($a['teacher_name']) ?></a></td>
-            <td class="px-4 py-3 text-slate-500"><?= (int) $a['term_scope'] === 0 ? 'All Terms' : 'Term ' . (int) $a['term_scope'] ?></td>
-            <td class="px-4 py-3 text-slate-500"><?php
+            <td class="px-4 py-3"><a href="<?= h(url('/admin/assignments.php?teacher_id=' . $a['teacher_id'])) ?>" class="text-accent-600 dark:text-accent-400 hover:underline"><?= h($a['teacher_name']) ?></a></td>
+            <td class="px-4 py-3 text-slate-500 dark:text-slate-400"><?= (int) $a['term_scope'] === 0 ? 'All Terms' : 'Term ' . (int) $a['term_scope'] ?></td>
+            <td class="px-4 py-3 text-slate-500 dark:text-slate-400"><?php
               if ($a['major_name'] !== null) {
                   echo h($a['major_name']) . ' major';
               } else {
@@ -535,12 +535,12 @@ render_header('Subject Assignments');
                   };
               }
             ?></td>
-            <td class="px-4 py-3"><?= $a['created_via'] === 'self_claim' ? '<span class="text-amber-600">Self-claimed</span>' : '<span class="text-slate-400">Admin</span>' ?></td>
-            <td class="px-4 py-3"><?= $a['is_active'] ? '<span class="text-emerald-600">Active</span>' : '<span class="text-slate-400">Inactive</span>' ?></td>
+            <td class="px-4 py-3"><?= $a['created_via'] === 'self_claim' ? '<span class="text-amber-600 dark:text-amber-400">Self-claimed</span>' : '<span class="text-slate-400 dark:text-slate-500">Admin</span>' ?></td>
+            <td class="px-4 py-3"><?= $a['is_active'] ? '<span class="text-emerald-600 dark:text-emerald-400">Active</span>' : '<span class="text-slate-400 dark:text-slate-500">Inactive</span>' ?></td>
           </tr>
           <?php endforeach; ?>
           <?php if (!$assignments): ?>
-          <tr><td colspan="8" class="px-4 py-6 text-center text-slate-400">No assignments yet.</td></tr>
+          <tr><td colspan="8" class="px-4 py-6 text-center text-slate-400 dark:text-slate-500">No assignments yet.</td></tr>
           <?php endif; ?>
         </tbody>
       </table>
@@ -556,19 +556,19 @@ window.addEventListener('DOMContentLoaded', function () {
 </script>
 
 <?php if ($viewTeacherId && ($viewTeacherAssignments || $viewTeacherEligibility)): ?>
-<a href="<?= h(url('/admin/assignments.php')) ?>" class="inline-block mb-4 text-sm text-accent-600 hover:underline">&larr; Back to Teachers</a>
-<h2 class="text-sm font-semibold text-slate-600 mb-3"><?= h($viewTeacherName ?? '') ?>'s Assignments</h2>
+<a href="<?= h(url('/admin/assignments.php')) ?>" class="inline-block mb-4 text-sm text-accent-600 dark:text-accent-400 hover:underline">&larr; Back to Teachers</a>
+<h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-3"><?= h($viewTeacherName ?? '') ?>'s Assignments</h2>
 
 <?php if ($viewTeacherEligibility): ?>
 <div class="mb-4 flex flex-wrap gap-2">
   <?php foreach ($viewTeacherEligibility as $e): ?>
-  <span class="inline-flex items-center gap-2 bg-slate-100 border border-slate-200 rounded-full pl-3 pr-1 py-1 text-xs">
-    <span class="<?= $e['is_active'] ? 'text-slate-700' : 'text-slate-400 line-through' ?>">Eligible: <?= h($e['subject_name'] . ' · ' . $e['grade_level'] . ' · ' . $e['year_label']) ?></span>
+  <span class="inline-flex items-center gap-2 bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-700 rounded-full pl-3 pr-1 py-1 text-xs">
+    <span class="<?= $e['is_active'] ? 'text-slate-700 dark:text-slate-200' : 'text-slate-400 dark:text-slate-500 line-through' ?>">Eligible: <?= h($e['subject_name'] . ' · ' . $e['grade_level'] . ' · ' . $e['year_label']) ?></span>
     <form method="post" class="inline">
       <?= csrf_field() ?>
       <input type="hidden" name="action" value="eligibility_toggle_active">
       <input type="hidden" name="id" value="<?= (int) $e['id'] ?>">
-      <button type="submit" class="text-slate-500 hover:text-slate-700 px-1.5 py-0.5 rounded-full hover:bg-slate-200 text-[10px] uppercase font-medium"><?= $e['is_active'] ? 'Deactivate' : 'Activate' ?></button>
+      <button type="submit" class="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 px-1.5 py-0.5 rounded-full hover:bg-slate-200 dark:hover:bg-slate-600 text-[10px] uppercase font-medium"><?= $e['is_active'] ? 'Deactivate' : 'Activate' ?></button>
     </form>
   </span>
   <?php endforeach; ?>
@@ -576,19 +576,19 @@ window.addEventListener('DOMContentLoaded', function () {
 <?php endif; ?>
 
 <?php if ($viewTeacherAssignments): ?>
-<div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden">
   <table class="w-full text-sm">
-    <thead class="bg-slate-50 text-slate-500 text-xs uppercase">
+    <thead class="bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 text-xs uppercase">
       <tr><th class="text-left px-4 py-3">Year</th><th class="text-left px-4 py-3">Section</th><th class="text-left px-4 py-3">Subject</th><th class="text-left px-4 py-3">Term</th><th class="text-left px-4 py-3">Applies To</th><th class="text-left px-4 py-3">Status</th><th class="px-4 py-3"></th></tr>
     </thead>
-    <tbody class="divide-y divide-slate-100">
+    <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
       <?php foreach ($viewTeacherAssignments as $a): ?>
       <tr>
-        <td class="px-4 py-3 text-slate-500"><?= h($a['year_label']) ?></td>
-        <td class="px-4 py-3 text-slate-600"><?= h($a['grade_level'] . ' - ' . $a['section_name']) ?></td>
+        <td class="px-4 py-3 text-slate-500 dark:text-slate-400"><?= h($a['year_label']) ?></td>
+        <td class="px-4 py-3 text-slate-600 dark:text-slate-300"><?= h($a['grade_level'] . ' - ' . $a['section_name']) ?></td>
         <td class="px-4 py-3 font-medium"><?= h($a['subject_name']) ?></td>
-        <td class="px-4 py-3 text-slate-500"><?= (int) $a['term_scope'] === 0 ? 'All Terms' : 'Term ' . (int) $a['term_scope'] ?></td>
-        <td class="px-4 py-3 text-slate-500"><?php
+        <td class="px-4 py-3 text-slate-500 dark:text-slate-400"><?= (int) $a['term_scope'] === 0 ? 'All Terms' : 'Term ' . (int) $a['term_scope'] ?></td>
+        <td class="px-4 py-3 text-slate-500 dark:text-slate-400"><?php
           echo match ($a['sex_scope']) {
               'ALL' => 'All Students',
               'M' => 'Male Only',
@@ -597,14 +597,14 @@ window.addEventListener('DOMContentLoaded', function () {
               default => h($a['sex_scope']),
           };
         ?></td>
-        <td class="px-4 py-3"><?= $a['is_active'] ? '<span class="text-emerald-600">Active</span>' : '<span class="text-slate-400">Inactive</span>' ?></td>
+        <td class="px-4 py-3"><?= $a['is_active'] ? '<span class="text-emerald-600 dark:text-emerald-400">Active</span>' : '<span class="text-slate-400 dark:text-slate-500">Inactive</span>' ?></td>
         <td class="px-4 py-3 text-right space-x-2">
-          <a href="<?= h(url('/admin/assignments.php?edit=' . $a['id'])) ?>" class="text-accent-600 hover:underline">Edit</a>
+          <a href="<?= h(url('/admin/assignments.php?edit=' . $a['id'])) ?>" class="text-accent-600 dark:text-accent-400 hover:underline">Edit</a>
           <form method="post" class="inline">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="toggle_active">
             <input type="hidden" name="id" value="<?= (int) $a['id'] ?>">
-            <button type="submit" class="text-slate-500 hover:underline"><?= $a['is_active'] ? 'Deactivate' : 'Activate' ?></button>
+            <button type="submit" class="text-slate-500 dark:text-slate-400 hover:underline"><?= $a['is_active'] ? 'Deactivate' : 'Activate' ?></button>
           </form>
         </td>
       </tr>
@@ -613,35 +613,35 @@ window.addEventListener('DOMContentLoaded', function () {
   </table>
 </div>
 <?php else: ?>
-<div class="bg-white border border-slate-200 rounded-xl shadow-sm px-4 py-8 text-center text-slate-400 text-sm">No assignments yet — only eligibility tags.</div>
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm px-4 py-8 text-center text-slate-400 dark:text-slate-500 text-sm">No assignments yet — only eligibility tags.</div>
 <?php endif; ?>
 <?php else: ?>
 <div class="mb-4 max-w-sm">
-  <input type="text" id="assignment-teacher-search" placeholder="Search teachers…" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+  <input type="text" id="assignment-teacher-search" placeholder="Search teachers…" class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm">
 </div>
 <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
   <?php foreach ($teacherSummaries as $t): ?>
   <a href="<?= h(url('/admin/assignments.php?teacher_id=' . $t['teacher_id'])) ?>"
-     class="js-assignment-teacher-card block bg-white border border-slate-200 rounded-xl shadow-sm p-5 hover:border-accent-300 hover:shadow-md transition-shadow"
+     class="js-assignment-teacher-card block bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-5 hover:border-accent-300 hover:shadow-md transition-shadow"
      data-search="<?= h($t['teacher_name']) ?>">
     <div class="flex items-center gap-3 mb-4">
       <div class="w-11 h-11 rounded-full <?= avatar_color($t['teacher_id']) ?> text-white flex items-center justify-center text-sm font-semibold flex-shrink-0"><?= h(avatar_initials($t['teacher_name'])) ?></div>
       <div class="min-w-0">
-        <div class="font-semibold text-slate-800 truncate"><?= h($t['teacher_name']) ?></div>
-        <div class="text-xs text-slate-500"><?= count($t['subjects']) ?> subject<?= count($t['subjects']) === 1 ? '' : 's' ?> · <?= count($t['sections']) ?> section<?= count($t['sections']) === 1 ? '' : 's' ?></div>
+        <div class="font-semibold text-slate-800 dark:text-slate-100 truncate"><?= h($t['teacher_name']) ?></div>
+        <div class="text-xs text-slate-500 dark:text-slate-400"><?= count($t['subjects']) ?> subject<?= count($t['subjects']) === 1 ? '' : 's' ?> · <?= count($t['sections']) ?> section<?= count($t['sections']) === 1 ? '' : 's' ?></div>
       </div>
     </div>
     <div class="flex items-center justify-between">
       <div class="text-xs">
-        <span class="font-semibold text-slate-700"><?= $t['active'] ?></span> <span class="text-slate-500">active</span>
-        <?php if ($t['total'] > $t['active']): ?><span class="text-slate-400"> · <?= $t['total'] - $t['active'] ?> inactive</span><?php endif; ?>
+        <span class="font-semibold text-slate-700 dark:text-slate-200"><?= $t['active'] ?></span> <span class="text-slate-500 dark:text-slate-400">active</span>
+        <?php if ($t['total'] > $t['active']): ?><span class="text-slate-400 dark:text-slate-500"> · <?= $t['total'] - $t['active'] ?> inactive</span><?php endif; ?>
       </div>
-      <span class="text-accent-600"><?= icon_svg('arrow-right', 'w-4 h-4') ?></span>
+      <span class="text-accent-600 dark:text-accent-400"><?= icon_svg('arrow-right', 'w-4 h-4') ?></span>
     </div>
   </a>
   <?php endforeach; ?>
   <?php if (!$teacherSummaries): ?>
-  <div class="text-slate-400 text-sm">No assignments yet.</div>
+  <div class="text-slate-400 dark:text-slate-500 text-sm">No assignments yet.</div>
   <?php endif; ?>
 </div>
 <script>
