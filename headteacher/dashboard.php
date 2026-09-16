@@ -32,6 +32,20 @@ if ($teacherId && $subjectId) {
 
     $statusStmt = $pdo->prepare('SELECT term, status FROM submission_status WHERE section_subject_teacher_id = ?');
 
+    // Which (section, term) cells currently have a pending edit request — overlaid onto the
+    // status badge below so a Head Teacher sees "Request for Edit" instead of a plain
+    // "Published" that gives no hint anything needs their attention.
+    $assignmentIds = array_column($assignments, 'id');
+    $pendingEdits = [];
+    if ($assignmentIds) {
+        $placeholders = implode(',', array_fill(0, count($assignmentIds), '?'));
+        $pendingStmt = $pdo->prepare("SELECT section_subject_teacher_id, term FROM grade_edit_requests WHERE status = 'pending' AND section_subject_teacher_id IN ($placeholders)");
+        $pendingStmt->execute($assignmentIds);
+        foreach ($pendingStmt->fetchAll() as $row) {
+            $pendingEdits[$row['section_subject_teacher_id'] . '-' . $row['term']] = true;
+        }
+    }
+
     render_header($assignments[0]['teacher_name'] . ' · ' . $assignments[0]['subject_name']);
     ?>
     <a href="<?= h(url('/headteacher/dashboard.php')) ?>" class="inline-block mb-4 text-sm text-accent-600 dark:text-accent-400 hover:underline">&larr; Back to Teachers</a>
@@ -52,10 +66,12 @@ if ($teacherId && $subjectId) {
           ?>
           <tr>
             <td class="px-4 py-3 font-medium"><?= h($a['grade_level'] . ' - ' . $a['section_name']) ?></td>
-            <?php for ($t = 1; $t <= 3; $t++): ?>
+            <?php for ($t = 1; $t <= 3; $t++):
+                $cellStatus = isset($pendingEdits[$a['id'] . '-' . $t]) ? 'edit_requested' : ($statuses[$t] ?? 'not_started');
+            ?>
             <td class="px-4 py-3">
               <a href="<?= h(url('/headteacher/review.php?sst_id=' . $a['id'] . '&term=' . $t)) ?>" class="hover:underline">
-                <?= status_badge($statuses[$t] ?? 'not_started') ?>
+                <?= status_badge($cellStatus) ?>
               </a>
             </td>
             <?php endfor; ?>
@@ -86,6 +102,22 @@ $stmt = $pdo->prepare('SELECT sst.teacher_id, u.full_name AS teacher_name, sst.s
     ORDER BY sub.subject_name, u.full_name');
 $stmt->execute([$user['id'], $year['id']]);
 $groups = $stmt->fetchAll();
+
+// Kept as its own query rather than another JOIN above — grade_edit_requests and
+// submission_status are both one-row-per-term against the same section_subject_teachers row,
+// so joining both into one GROUP BY would fan out (each pending request multiplied once per
+// submission_status row for that assignment) and inflate every other SUM() in that query.
+$pendingEditsByGroup = [];
+$editStmt = $pdo->prepare('SELECT sst.teacher_id, sst.subject_id, COUNT(*) AS pending_edit_count
+    FROM grade_edit_requests ger
+    JOIN section_subject_teachers sst ON sst.id = ger.section_subject_teacher_id
+    JOIN head_teacher_assignments hta ON hta.subject_id = sst.subject_id AND hta.school_year_id = sst.school_year_id
+    WHERE hta.head_teacher_id = ? AND hta.is_active = 1 AND sst.school_year_id = ? AND sst.is_active = 1 AND ger.status = \'pending\'
+    GROUP BY sst.teacher_id, sst.subject_id');
+$editStmt->execute([$user['id'], $year['id']]);
+foreach ($editStmt->fetchAll() as $row) {
+    $pendingEditsByGroup[$row['teacher_id'] . '-' . $row['subject_id']] = (int) $row['pending_edit_count'];
+}
 
 $pendingCount = count(array_filter($groups, fn($g) => (int) $g['awaiting_review_count'] > 0));
 $reviewedCount = count(array_filter($groups, fn($g) => (int) $g['awaiting_review_count'] === 0 && (int) $g['published_count'] > 0));
@@ -122,6 +154,7 @@ echo ht_tab_nav('review');
   </div>
   <select id="ht-status-filter" class="px-3 py-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg">
     <option value="">All Statuses</option>
+    <option value="edit_requested">Request for Edit</option>
     <option value="submitted_for_review">Awaiting Review</option>
     <option value="published">Published</option>
     <option value="not_started">Not Started</option>
@@ -136,7 +169,9 @@ echo ht_tab_nav('review');
 
 <div class="grid gap-4 md:grid-cols-2">
   <?php foreach ($groups as $g):
-      $cardStatus = (int) $g['awaiting_review_count'] > 0 ? 'submitted_for_review' : ((int) $g['published_count'] > 0 ? 'published' : 'not_started');
+      $hasPendingEdit = ($pendingEditsByGroup[$g['teacher_id'] . '-' . $g['subject_id']] ?? 0) > 0;
+      $cardStatus = $hasPendingEdit ? 'edit_requested'
+          : ((int) $g['awaiting_review_count'] > 0 ? 'submitted_for_review' : ((int) $g['published_count'] > 0 ? 'published' : 'not_started'));
       $teacherIdForCard = (int) $g['teacher_id'];
   ?>
   <a href="<?= h(url('/headteacher/dashboard.php?teacher_id=' . $g['teacher_id'] . '&subject_id=' . $g['subject_id'])) ?>"

@@ -9,6 +9,10 @@ const STATUS_LABELS = [
     'submitted_for_review' => 'Submitted for Review',
     'returned_for_revision' => 'Returned for Revision',
     'published' => 'Published',
+    // Not a real submission_status value — a display-only overlay headteacher/dashboard.php
+    // uses in place of 'published' for a term that currently has a pending grade_edit_requests
+    // row, so a Head Teacher sees it needs action without opening every card to find out.
+    'edit_requested' => 'Request for Edit',
 ];
 
 const STATUS_CLASSES = [
@@ -17,6 +21,7 @@ const STATUS_CLASSES = [
     'submitted_for_review' => 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
     'returned_for_revision' => 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-300',
     'published' => 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
+    'edit_requested' => 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300',
 ];
 
 // Fixed reasons a teacher can give for a below-75 term grade (term_grade_fail_reasons.reason).
