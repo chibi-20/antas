@@ -556,6 +556,15 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
             'PT' => 'bg-teal-100 dark:bg-teal-900 text-teal-700 dark:text-teal-300',
             'EX' => 'bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300',
         ];
+        // Same three colors as the header bands above, but at a low enough opacity to sit
+        // behind a score without fighting it for attention — lets a teacher tell which
+        // component a column belongs to at a glance while scrolling, without having to look
+        // back up at the (possibly scrolled-past) header band to check.
+        $componentCellTint = [
+            'WW' => 'bg-violet-50 dark:bg-violet-900/20',
+            'PT' => 'bg-teal-50 dark:bg-teal-900/20',
+            'EX' => 'bg-orange-50 dark:bg-orange-900/20',
+        ];
         // Row1 sticks to the very top of the scrolling pane (#grid-scroll-bottom, top-0);
         // row2 stacks right below it (top-0 + row1's own h-8 = top-8) — #6's sticky header,
         // combined with #7's grouped bands.
@@ -621,20 +630,22 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
               <td class="px-3 py-2 text-center">
                 <?php
                   $rawScore = $scoreLookup[$item['id']][$student['id']] ?? null;
-                  // Empty vs filled gets a visibly different look (#3) — dashed border + faint
-                  // tint for "nothing here yet" vs a solid border for "has a value" — so a
-                  // gap is visible at a glance while scanning, without looking like an error
-                  // (a blank cell is completely normal mid-term).
-                  $cellStateClass = $rawScore !== null
-                      ? 'border-solid border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900'
-                      : 'border-dashed border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-900/40';
+                  // Empty vs filled gets a visibly different look (#3) — dashed border for
+                  // "nothing here yet" vs a solid border for "has a value" — so a gap is
+                  // visible at a glance while scanning, without looking like an error (a blank
+                  // cell is completely normal mid-term). The tint itself is the component's
+                  // own color now (see $componentCellTint above), the same for both states, so
+                  // it reads as "which column" rather than getting mistaken for "empty".
+                  $cellBorderClass = $rawScore !== null
+                      ? 'border-solid border-slate-300 dark:border-slate-600'
+                      : 'border-dashed border-slate-300 dark:border-slate-600';
                 ?>
                 <input type="number" step="1" min="0" max="<?= h($item['highest_possible_score']) ?>"
                   name="scores[<?= (int) $item['id'] ?>][<?= (int) $student['id'] ?>]"
                   value="<?= $rawScore !== null ? (int) round((float) $rawScore) : '' ?>"
                   data-row="<?= $rowIndex ?>" data-col="<?= $itemColumns[$item['id']] ?>" data-item-id="<?= (int) $item['id'] ?>"
                   <?= $editable ? '' : 'disabled' ?>
-                  class="js-grade-cell w-16 px-2 py-1 border <?= $cellStateClass ?> dark:text-slate-100 rounded text-center disabled:bg-slate-50 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-500 focus:border-accent-500 focus:ring-1 focus:ring-accent-500">
+                  class="js-grade-cell w-16 px-2 py-1 border <?= $cellBorderClass ?> <?= $componentCellTint[$type] ?> dark:text-slate-100 rounded text-center disabled:bg-slate-50 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-500 focus:border-accent-500 focus:ring-1 focus:ring-accent-500">
               </td>
             <?php endforeach; ?>
           <?php endforeach; ?>

@@ -245,7 +245,7 @@ function get_consolidated_data(int $sectionId, int $schoolYearId, int $term): ar
     // relevant to the requested term (term_scope=0 means "every term"). Every matching row is
     // accumulated into that subject's 'assignments' list rather than the old one-row-per-
     // subject assumption, which used to silently let a later row clobber an earlier one.
-    $rows = $pdo->prepare('SELECT sst.id AS sst_id, sst.sex_scope, sst.major_id, sub.id AS subject_id, sub.subject_name, sub.parent_subject_id, sub.sort_order, ss.status
+    $rows = $pdo->prepare('SELECT sst.id AS sst_id, sst.sex_scope, sst.major_id, sub.id AS subject_id, sub.subject_name, sub.subject_code, sub.parent_subject_id, sub.sort_order, ss.status
         FROM section_subject_teachers sst
         JOIN subjects sub ON sub.id = sst.subject_id
         LEFT JOIN submission_status ss ON ss.section_subject_teacher_id = sst.id AND ss.term = ?
@@ -259,7 +259,7 @@ function get_consolidated_data(int $sectionId, int $schoolYearId, int $term): ar
     $mixSstIds = [];
     foreach ($rows as $row) {
         $sid = (int) $row['subject_id'];
-        $subjectMeta[$sid] = ['subject_name' => $row['subject_name'], 'parent_subject_id' => $row['parent_subject_id'], 'sort_order' => (int) $row['sort_order']];
+        $subjectMeta[$sid] = ['subject_name' => $row['subject_name'], 'subject_code' => $row['subject_code'], 'parent_subject_id' => $row['parent_subject_id'], 'sort_order' => (int) $row['sort_order']];
         $assignmentsBySubject[$sid][] = [
             'sst_id' => (int) $row['sst_id'],
             'sex_scope' => $row['sex_scope'],
@@ -303,6 +303,7 @@ function get_consolidated_data(int $sectionId, int $schoolYearId, int $term): ar
             'sst_id' => count($assignments) === 1 ? $assignments[0]['sst_id'] : null,
             'subject_id' => $sid,
             'subject_name' => $meta['subject_name'],
+            'subject_code' => $meta['subject_code'],
             'parent_subject_id' => $meta['parent_subject_id'],
             'sort_order' => $meta['sort_order'],
             'status' => $status,
@@ -317,7 +318,7 @@ function get_consolidated_data(int $sectionId, int $schoolYearId, int $term): ar
     }
     if ($childGroups) {
         $placeholders = implode(',', array_fill(0, count($childGroups), '?'));
-        $parentStmt = $pdo->prepare("SELECT id, subject_name, sort_order FROM subjects WHERE id IN ($placeholders)");
+        $parentStmt = $pdo->prepare("SELECT id, subject_name, subject_code, sort_order FROM subjects WHERE id IN ($placeholders)");
         $parentStmt->execute(array_keys($childGroups));
         foreach ($parentStmt->fetchAll() as $parent) {
             $children = $childGroups[(int) $parent['id']];
@@ -327,6 +328,7 @@ function get_consolidated_data(int $sectionId, int $schoolYearId, int $term): ar
                 'sst_id' => null,
                 'subject_id' => (int) $parent['id'],
                 'subject_name' => $parent['subject_name'],
+                'subject_code' => $parent['subject_code'],
                 'parent_subject_id' => null,
                 'sort_order' => (int) $parent['sort_order'],
                 'status' => $allPublished ? 'published' : 'pending',

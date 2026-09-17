@@ -59,7 +59,10 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
       <tr>
         <th rowspan="2" class="text-left px-4 py-3 sticky left-0 bg-slate-50 dark:bg-slate-900 align-bottom">Student</th>
         <?php foreach ($data['subjects'] as $subject): ?>
-          <th colspan="<?= $term + ($term === 3 ? 1 : 0) ?>" class="text-center px-3 py-2 whitespace-nowrap border-l border-slate-200 dark:border-slate-700 <?= $subject['is_child'] ? 'italic font-normal text-slate-500 dark:text-slate-400' : '' ?>"><?= h($subject['subject_name']) ?></th>
+          <th colspan="<?= $term + ($term === 3 ? 1 : 0) ?>" class="text-center px-3 py-2 whitespace-nowrap border-l border-slate-200 dark:border-slate-700 <?= $subject['is_child'] ? 'italic font-normal text-slate-500 dark:text-slate-400' : '' ?>">
+            <span class="js-subject-fullname"><?= h($subject['subject_name']) ?></span>
+            <span class="js-subject-code hidden"><?= h($subject['subject_code']) ?></span>
+          </th>
         <?php endforeach; ?>
         <th rowspan="2" class="text-center px-3 py-3 align-bottom">General Average</th>
         <th rowspan="2" class="text-center px-3 py-3 align-bottom">Rank</th>
@@ -150,6 +153,15 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
     var savedWrapStyle = tableWrap.getAttribute('style');
     var wasHidden = letterhead.classList.contains('hidden');
 
+    // Swapping every subject header to its short code (e.g. "TLE" instead of "TECHNOLOGY AND
+    // LIVELIHOOD EDUCATION") only for the capture — never on screen, where the full name reads
+    // better and there's no real space constraint — buys back real column width on paper,
+    // which matters more the more subjects a section has.
+    var fullNameEls = document.querySelectorAll('.js-subject-fullname');
+    var codeEls = document.querySelectorAll('.js-subject-code');
+    fullNameEls.forEach(function (el) { el.classList.add('hidden'); });
+    codeEls.forEach(function (el) { el.classList.remove('hidden'); });
+
     try {
       // Un-clip the table so html2canvas captures its full width, not just what's visibly
       // scrolled into view, and reveal the normally-hidden official letterhead for the capture.
@@ -164,7 +176,15 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
         return tr.getBoundingClientRect().top - root.getBoundingClientRect().top;
       });
 
-      var canvas = await html2canvas(root, { scale: SCALE, backgroundColor: '#ffffff' });
+      // The page's <main> has overflow:hidden (keeps the sidebar layout from breaking on any
+      // stray wide content), which silently clips html2canvas's capture to whatever width
+      // happened to be visible — cutting off every subject column past whatever was on screen
+      // at the moment Download PDF was clicked (this is the actual bug: un-clipping the table
+      // itself, above, was never enough on its own since the ancestor <main> clips regardless).
+      // windowWidth/width force html2canvas to render in its own off-screen clone sized to the
+      // table's true content width instead.
+      var neededWidth = Math.ceil(root.scrollWidth) + 40;
+      var canvas = await html2canvas(root, { scale: SCALE, backgroundColor: '#ffffff', windowWidth: neededWidth, width: neededWidth });
 
       var pageWidthMm = 277, pageHeightMm = 190; // A4 landscape minus 10mm margins
       var pxPerMm = canvas.width / pageWidthMm;
@@ -202,6 +222,8 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
         tableWrap.setAttribute('style', savedWrapStyle);
       }
       if (wasHidden) letterhead.classList.add('hidden');
+      fullNameEls.forEach(function (el) { el.classList.remove('hidden'); });
+      codeEls.forEach(function (el) { el.classList.add('hidden'); });
       btn.disabled = false;
       btn.innerHTML = originalLabel;
     }

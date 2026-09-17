@@ -77,17 +77,32 @@ if ($isOverall) {
     $ranking = $stmt->fetchAll();
 }
 
+$year = active_school_year();
+
 render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · Ranking');
 ?>
-<form method="get" class="flex gap-1 mb-6">
-  <input type="hidden" name="section_id" value="<?= $sectionId ?>">
-  <?php for ($t = 1; $t <= 3; $t++): ?>
-    <button type="submit" name="term" value="<?= $t ?>" class="px-3 py-1.5 rounded-lg text-sm <?= $view === (string) $t ? 'bg-accent-600 text-white' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700' ?>">Term <?= $t ?></button>
-  <?php endfor; ?>
-  <button type="submit" name="term" value="overall" class="px-3 py-1.5 rounded-lg text-sm <?= $isOverall ? 'bg-accent-600 text-white' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700' ?>">Overall</button>
-</form>
+<div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+  <form method="get" class="flex gap-1">
+    <input type="hidden" name="section_id" value="<?= $sectionId ?>">
+    <?php for ($t = 1; $t <= 3; $t++): ?>
+      <button type="submit" name="term" value="<?= $t ?>" class="px-3 py-1.5 rounded-lg text-sm <?= $view === (string) $t ? 'bg-accent-600 text-white' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700' ?>">Term <?= $t ?></button>
+    <?php endfor; ?>
+    <button type="submit" name="term" value="overall" class="px-3 py-1.5 rounded-lg text-sm <?= $isOverall ? 'bg-accent-600 text-white' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700' ?>">Overall</button>
+  </form>
+  <button id="download-pdf" type="button" class="px-3 py-1.5 rounded-lg text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-1.5"><?= icon_svg('download', 'w-4 h-4') ?> Download PDF</button>
+</div>
 
-<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden max-w-3xl">
+<div id="pdf-capture-root">
+<div id="pdf-letterhead" class="hidden text-center leading-tight mb-4 text-slate-800">
+  <div>Republic of the Philippines</div>
+  <div>Department of Education</div>
+  <div>Region IV-A CALABARZON</div>
+  <div>Division of Biñan City</div>
+  <div class="font-semibold">JACOBO Z. GONZALES MEMORIAL NATIONAL HIGH SCHOOL</div>
+  <div class="font-semibold mt-1">RANKING — <?= h($section['grade_level'] . ' - ' . $section['section_name']) ?></div>
+  <div><?= $isOverall ? 'Overall' : 'Term ' . $view ?> · <?= h($year['year_label'] ?? '') ?></div>
+</div>
+<div id="pdf-clip-wrap" class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden max-w-3xl">
   <table class="w-full text-sm">
     <thead class="bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 text-xs uppercase">
       <tr><th class="text-left px-4 py-3">Rank</th><th class="text-left px-4 py-3">Student</th><th class="text-left px-4 py-3">General Average</th><th class="text-left px-4 py-3">Whole Grade</th><th class="text-left px-4 py-3">Honor</th></tr>
@@ -125,4 +140,72 @@ render_header($section['grade_level'] . ' - ' . $section['section_name'] . ' · 
     </tbody>
   </table>
 </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script>
+(function () {
+  var btn = document.getElementById('download-pdf');
+  if (!btn) return;
+  var fileName = <?= json_encode(strtolower(preg_replace('/[^a-z0-9]+/i', '-', $section['grade_level'] . '-' . $section['section_name'])) . '-' . ($isOverall ? 'overall' : 'term' . $view) . '-ranking.pdf') ?>;
+
+  btn.addEventListener('click', async function () {
+    var originalLabel = btn.innerHTML;
+    btn.disabled = true;
+    btn.textContent = 'Generating PDF…';
+
+    var letterhead = document.getElementById('pdf-letterhead');
+    var root = document.getElementById('pdf-capture-root');
+    var wasHidden = letterhead.classList.contains('hidden');
+
+    try {
+      letterhead.classList.remove('hidden');
+
+      var SCALE = 2;
+      // Row-boundary-aware page breaks (same approach as Class Record/Consolidated Grades'
+      // own PDF export) — a long roster can still run past one page, so this measures each
+      // row's position before capture and only breaks between rows, never through one.
+      var rowOffsetsCss = Array.prototype.map.call(root.querySelectorAll('tbody tr'), function (tr) {
+        return tr.getBoundingClientRect().top - root.getBoundingClientRect().top;
+      });
+
+      var canvas = await html2canvas(root, { scale: SCALE, backgroundColor: '#ffffff' });
+
+      var pageWidthMm = 190, pageHeightMm = 277; // A4 portrait minus 10mm margins
+      var pxPerMm = canvas.width / pageWidthMm;
+      var pageHeightPx = pageHeightMm * pxPerMm;
+
+      var breaks = [0];
+      var budgetStart = 0;
+      rowOffsetsCss.forEach(function (cssTop) {
+        var px = cssTop * SCALE;
+        if (px - budgetStart > pageHeightPx) {
+          breaks.push(px);
+          budgetStart = px;
+        }
+      });
+      breaks.push(canvas.height);
+
+      var pdf = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+      for (var i = 0; i < breaks.length - 1; i++) {
+        var sliceTop = breaks[i], sliceH = breaks[i + 1] - breaks[i];
+        if (sliceH <= 0) continue;
+        var pageCanvas = document.createElement('canvas');
+        pageCanvas.width = canvas.width;
+        pageCanvas.height = sliceH;
+        pageCanvas.getContext('2d').drawImage(canvas, 0, sliceTop, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+        if (i > 0) pdf.addPage();
+        pdf.addImage(pageCanvas.toDataURL('image/jpeg', 0.95), 'JPEG', 10, 10, pageWidthMm, sliceH / pxPerMm);
+      }
+      pdf.save(fileName);
+    } catch (err) {
+      alert('Could not generate the PDF: ' + err.message);
+    } finally {
+      if (wasHidden) letterhead.classList.add('hidden');
+      btn.disabled = false;
+      btn.innerHTML = originalLabel;
+    }
+  });
+})();
+</script>
 <?php render_footer(); ?>

@@ -293,9 +293,16 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
   // teacher sees while filling it in, just read-only, so a Head Teacher reviewing it recognizes
   // it as "the class record" rather than a different-looking summary table.
   $componentBandClasses = [
-      'WW' => 'bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300',
-      'PT' => 'bg-teal-100 text-teal-700',
-      'EX' => 'bg-orange-100 text-orange-700',
+      'WW' => 'bg-violet-100 dark:bg-violet-900 text-violet-700 dark:text-violet-300',
+      'PT' => 'bg-teal-100 dark:bg-teal-900 text-teal-700 dark:text-teal-300',
+      'EX' => 'bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-300',
+  ];
+  // Same three colors, low opacity, for the score cells themselves — see the matching
+  // $componentCellTint in teacher/class_record.php for why.
+  $componentCellTint = [
+      'WW' => 'bg-violet-50 dark:bg-violet-900/20',
+      'PT' => 'bg-teal-50 dark:bg-teal-900/20',
+      'EX' => 'bg-orange-50 dark:bg-orange-900/20',
   ];
   $headSticky = 'sticky z-20 bg-slate-50 dark:bg-slate-900';
 ?>
@@ -345,7 +352,7 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
           <td class="px-4 py-2 font-medium whitespace-nowrap sticky left-0 z-10 bg-white dark:bg-slate-800"><?= h($student['full_name']) ?></td>
           <?php foreach (['WW', 'PT', 'EX'] as $type): ?>
             <?php foreach ($itemsByType[$type] as $item): ?>
-              <td class="px-3 py-2 text-center text-slate-600 dark:text-slate-300"><?= h($scoreLookup[$item['id']][$student['id']] ?? '—') ?></td>
+              <td class="px-3 py-2 text-center text-slate-600 dark:text-slate-300 <?= $componentCellTint[$type] ?>"><?= h($scoreLookup[$item['id']][$student['id']] ?? '—') ?></td>
             <?php endforeach; ?>
           <?php endforeach; ?>
           <?php for ($t = 1; $t < $term; $t++): $pg = $priorGrades[$t][$student['id']] ?? null; ?>
