@@ -48,36 +48,37 @@ if ($term < 1 || $term > 3) {
     $term = 1;
 }
 
-// 7-band Proficiency Level, matching the school's own SF report table exactly — Outstanding
-// is one band (90-100) but broken into three finer-grained count columns (98-100/95-97/90-94,
-// same as the source table) rather than a single merged 90-100 row, so each keeps its own
-// 'key' distinct from its shared 'label' (three PHP array keys can't all be "Outstanding").
-// Transmuted grades are always whole numbers (see transmutation_table), so integer-inclusive
-// boundaries are exact.
-const PL_BANDS = [
-    ['min' => 98, 'key' => 'outstanding_98', 'label' => 'Outstanding', 'range' => '98-100'],
-    ['min' => 95, 'key' => 'outstanding_95', 'label' => 'Outstanding', 'range' => '95-97'],
-    ['min' => 90, 'key' => 'outstanding_90', 'label' => 'Outstanding', 'range' => '90-94'],
-    ['min' => 85, 'key' => 'very_satisfactory', 'label' => 'Very Satisfactory', 'range' => '85-89'],
-    ['min' => 80, 'key' => 'satisfactory', 'label' => 'Satisfactory', 'range' => '80-84'],
-    ['min' => 75, 'key' => 'fairly_satisfactory', 'label' => 'Fairly Satisfactory', 'range' => '75-79'],
-    ['min' => -1, 'key' => 'did_not_meet', 'label' => 'Did Not Meet Expectations', 'range' => 'Below 75'],
+// Section-level rollup matching the school's own summary-sheet format: rows are sections,
+// columns are bands — not the earlier band-rows/Male-Female-columns shape. Uses the same
+// five-letter descriptor scale already shown per-grade on Card Slips/Consolidated Grades
+// (GRADE_DESCRIPTOR_LEGEND), except Emerging is split further into 60-64 vs a separate
+// "At-Risk of Failing" (below 60) column, per the sheet the school actually uses. That split
+// exists ONLY on this page — GRADE_DESCRIPTOR_LEGEND itself (and the letter shown everywhere
+// else) still treats the whole 0-64 range as one Emerging band, so don't reuse these keys
+// elsewhere expecting them to line up.
+const PL_SECTION_BANDS = [
+    ['min' => 90, 'key' => 'advancing', 'label' => 'Advancing', 'range' => '90-100'],
+    ['min' => 80, 'key' => 'benchmarking', 'label' => 'Benchmarking', 'range' => '80-89'],
+    ['min' => 75, 'key' => 'connecting', 'label' => 'Connecting', 'range' => '75-79'],
+    ['min' => 65, 'key' => 'developing', 'label' => 'Developing', 'range' => '65-74'],
+    ['min' => 60, 'key' => 'emerging', 'label' => 'Emerging', 'range' => '60-64'],
+    ['min' => -1, 'key' => 'at_risk', 'label' => 'At-Risk of Failing', 'range' => 'Below 60'],
 ];
-function pl_band(float $grade): string
+function pl_section_band(float $grade): string
 {
-    foreach (PL_BANDS as $band) {
+    foreach (PL_SECTION_BANDS as $band) {
         if ($grade >= $band['min']) {
             return $band['key'];
         }
     }
-    return 'did_not_meet';
+    return 'at_risk';
 }
-$bandKeys = array_column(PL_BANDS, 'key');
-$bandLabels = array_combine($bandKeys, array_column(PL_BANDS, 'label'));
-$bandRanges = array_combine($bandKeys, array_column(PL_BANDS, 'range'));
+$bandKeys = array_column(PL_SECTION_BANDS, 'key');
+$bandLabels = array_combine($bandKeys, array_column(PL_SECTION_BANDS, 'label'));
+$bandRanges = array_combine($bandKeys, array_column(PL_SECTION_BANDS, 'range'));
 
 $perSection = [];
-$perGradeLevel = [];
+$perGradeLevelChart = [];
 if ($subjectId && in_array($subjectId, $supervisedSubjectPickerIds, true)) {
     $childStmt = $pdo->prepare('SELECT id FROM subjects WHERE parent_subject_id = ?');
     $childStmt->execute([$subjectId]);
@@ -152,27 +153,56 @@ if ($subjectId && in_array($subjectId, $supervisedSubjectPickerIds, true)) {
     }
 
     foreach ($stmt->fetchAll() as $row) {
+        if (!isset($perSection[$row['section_id']])) {
+            $perSection[$row['section_id']] = [
+                'name' => $row['section_name'],
+                'grade_level_id' => (int) $row['grade_level_id'],
+                'grade_level' => $row['grade_level'],
+                'sort_order' => (int) $row['sort_order'],
+                'bands' => array_fill_keys($bandKeys, 0),
+            ];
+        }
         if ($row['transmuted_grade'] === null) {
             continue;
         }
-        $band = pl_band((float) $row['transmuted_grade']);
-        $sex = $row['sex'];
+        $band = pl_section_band((float) $row['transmuted_grade']);
+        $perSection[$row['section_id']]['bands'][$band]++;
 
-        if (!isset($perSection[$row['section_id']])) {
-            $perSection[$row['section_id']] = ['name' => $row['grade_level'] . ' - ' . $row['section_name'], 'grade_level_id' => $row['grade_level_id'], 'bands' => array_fill_keys($bandKeys, ['M' => 0, 'F' => 0])];
+        // Grade-level, Male/Female split — feeds only the chart below (the table itself is
+        // plain totals per the school's own sheet, no sex breakdown there).
+        $glId = (int) $row['grade_level_id'];
+        if (!isset($perGradeLevelChart[$glId])) {
+            $perGradeLevelChart[$glId] = array_fill_keys($bandKeys, ['M' => 0, 'F' => 0]);
         }
-        $perSection[$row['section_id']]['bands'][$band][$sex]++;
-
-        if (!isset($perGradeLevel[$row['grade_level_id']])) {
-            $perGradeLevel[$row['grade_level_id']] = ['name' => $row['grade_level'], 'sort_order' => $row['sort_order'], 'bands' => array_fill_keys($bandKeys, ['M' => 0, 'F' => 0])];
-        }
-        $perGradeLevel[$row['grade_level_id']]['bands'][$band]['M'] += $sex === 'M' ? 1 : 0;
-        $perGradeLevel[$row['grade_level_id']]['bands'][$band]['F'] += $sex === 'F' ? 1 : 0;
+        $perGradeLevelChart[$glId][$band][$row['sex']]++;
     }
 }
-uasort($perGradeLevel, fn($a, $b) => $a['sort_order'] <=> $b['sort_order']);
 
-render_header('Proficiency Level', 'Distribution of published grades across performance bands, split by sex.');
+// Green-to-red across the bands, from "clearing the bar comfortably" to "needs intervention
+// now" — deliberately distinct from the app's usual pass/fail red/green (grade_display_class,
+// status_badge) so a chart legend color is never mistaken for one of those other meanings.
+const PL_BAND_COLORS = [
+    'advancing' => '#16a34a',
+    'benchmarking' => '#4ade80',
+    'connecting' => '#facc15',
+    'developing' => '#fb923c',
+    'emerging' => '#f87171',
+    'at_risk' => '#dc2626',
+];
+
+$perGradeLevel = [];
+foreach ($perSection as $secId => $sec) {
+    $perGradeLevel[$sec['grade_level_id']]['name'] = $sec['grade_level'];
+    $perGradeLevel[$sec['grade_level_id']]['sort_order'] = $sec['sort_order'];
+    $perGradeLevel[$sec['grade_level_id']]['sections'][$secId] = $sec;
+}
+uasort($perGradeLevel, fn($a, $b) => $a['sort_order'] <=> $b['sort_order']);
+foreach ($perGradeLevel as &$gl) {
+    uasort($gl['sections'], fn($a, $b) => strcmp($a['name'], $b['name']));
+}
+unset($gl);
+
+render_header('Proficiency Level', 'Number of learners per section by proficiency band, matching the school\'s own summary report.');
 echo ht_tab_nav('proficiency');
 ?>
 <form method="get" class="flex flex-wrap gap-3 mb-6">
@@ -190,21 +220,30 @@ echo ht_tab_nav('proficiency');
 <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm px-4 py-8 text-center text-slate-400 dark:text-slate-500 text-sm">No published grades yet for this subject/term.</div>
 <?php else: ?>
 
+<?php foreach ($perGradeLevel as $glId => $gl):
+    $glTotals = array_fill_keys($bandKeys, 0);
+    foreach ($gl['sections'] as $sec) {
+        foreach ($sec['bands'] as $k => $v) {
+            $glTotals[$k] += $v;
+        }
+    }
+    $glBySex = $perGradeLevelChart[$glId] ?? array_fill_keys($bandKeys, ['M' => 0, 'F' => 0]);
+?>
+<div class="font-semibold text-slate-800 dark:text-slate-100 mb-3"><?= h($gl['name']) ?></div>
+
 <h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-3">Grade Level Rollup</h2>
-<?php foreach ($perGradeLevel as $glId => $gl): ?>
 <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-5 mb-6">
-  <div class="font-semibold text-slate-800 dark:text-slate-100 mb-4"><?= h($gl['name']) ?></div>
-  <div class="grid md:grid-cols-2 gap-6">
+  <div class="grid lg:grid-cols-2 gap-6">
     <div class="overflow-x-auto">
       <table class="w-full text-sm">
         <thead class="text-slate-500 dark:text-slate-400 text-xs uppercase">
           <tr><th class="text-left py-2">Band</th><th class="text-left py-2">Grade</th><th class="text-right py-2">Male</th><th class="text-right py-2">Female</th><th class="text-right py-2">Total</th></tr>
         </thead>
         <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
-          <?php foreach ($gl['bands'] as $band => $counts): ?>
+          <?php foreach ($bandKeys as $k): $counts = $glBySex[$k]; ?>
           <tr>
-            <td class="py-2"><?= h($bandLabels[$band]) ?></td>
-            <td class="py-2 text-slate-500 dark:text-slate-400"><?= h($bandRanges[$band]) ?></td>
+            <td class="py-2"><?= h($bandLabels[$k]) ?></td>
+            <td class="py-2 text-slate-500 dark:text-slate-400"><?= h($bandRanges[$k]) ?></td>
             <td class="py-2 text-right"><?= $counts['M'] ?></td>
             <td class="py-2 text-right"><?= $counts['F'] ?></td>
             <td class="py-2 text-right font-medium"><?= $counts['M'] + $counts['F'] ?></td>
@@ -216,37 +255,47 @@ echo ht_tab_nav('proficiency');
     <div><canvas id="pl-chart-<?= (int) $glId ?>" height="220"></canvas></div>
   </div>
 </div>
-<?php endforeach; ?>
 
-<h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-3">Per Section</h2>
-<div class="grid md:grid-cols-2 gap-4">
-  <?php foreach ($perSection as $sec): ?>
-  <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-5">
-    <div class="font-semibold text-slate-800 dark:text-slate-100 mb-3"><?= h($sec['name']) ?></div>
+<h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-3">By Section</h2>
+<div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-5 mb-6">
+  <div class="overflow-x-auto">
     <table class="w-full text-sm">
       <thead class="text-slate-500 dark:text-slate-400 text-xs uppercase">
-        <tr><th class="text-left py-1.5">Band</th><th class="text-left py-1.5">Grade</th><th class="text-right py-1.5">M</th><th class="text-right py-1.5">F</th><th class="text-right py-1.5">Total</th></tr>
+        <tr>
+          <th class="text-left py-2 pr-3">Section</th>
+          <?php foreach ($bandKeys as $k): ?>
+            <th class="text-center py-2 px-2 whitespace-nowrap"><?= h($bandLabels[$k]) ?><div class="text-[10px] font-normal normal-case text-slate-400 dark:text-slate-500"><?= h($bandRanges[$k]) ?></div></th>
+          <?php endforeach; ?>
+          <th class="text-right py-2 pl-3">Total</th>
+        </tr>
       </thead>
       <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
-        <?php foreach ($sec['bands'] as $band => $counts): ?>
-          <?php if ($counts['M'] + $counts['F'] === 0) continue; ?>
+        <?php foreach ($gl['sections'] as $sec): $total = array_sum($sec['bands']); ?>
         <tr>
-          <td class="py-1.5"><?= h($bandLabels[$band]) ?></td>
-          <td class="py-1.5 text-slate-500 dark:text-slate-400"><?= h($bandRanges[$band]) ?></td>
-          <td class="py-1.5 text-right"><?= $counts['M'] ?></td>
-          <td class="py-1.5 text-right"><?= $counts['F'] ?></td>
-          <td class="py-1.5 text-right font-medium"><?= $counts['M'] + $counts['F'] ?></td>
+          <td class="py-2 pr-3 font-medium whitespace-nowrap"><?= h($sec['name']) ?></td>
+          <?php foreach ($bandKeys as $k): ?>
+            <td class="text-center py-2 px-2 <?= $k === 'at_risk' && $sec['bands'][$k] > 0 ? 'text-rose-600 dark:text-rose-400 font-semibold' : '' ?>"><?= $sec['bands'][$k] ?></td>
+          <?php endforeach; ?>
+          <td class="text-right py-2 pl-3 font-semibold"><?= $total ?></td>
         </tr>
         <?php endforeach; ?>
       </tbody>
+      <tfoot>
+        <tr class="border-t-2 border-slate-200 dark:border-slate-600 font-semibold">
+          <td class="py-2 pr-3">Total</td>
+          <?php foreach ($bandKeys as $k): ?>
+            <td class="text-center py-2 px-2 <?= $k === 'at_risk' && $glTotals[$k] > 0 ? 'text-rose-600 dark:text-rose-400' : '' ?>"><?= $glTotals[$k] ?></td>
+          <?php endforeach; ?>
+          <td class="text-right py-2 pl-3"><?= array_sum($glTotals) ?></td>
+        </tr>
+      </tfoot>
     </table>
   </div>
-  <?php endforeach; ?>
 </div>
+<?php endforeach; ?>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script>
-<?php $chartLabels = array_map(fn($band) => [$bandLabels[$band], '(' . $bandRanges[$band] . ')'], $bandKeys); ?>
 (function () {
   // Chart.js's own default text/grid colors (a mid-grey tuned for a white canvas) go
   // low-contrast against this page's dark-mode cards — set from the theme at load time, and
@@ -258,14 +307,15 @@ echo ht_tab_nav('proficiency');
   Chart.defaults.borderColor = gridColor;
 
   var plCharts = [];
-  <?php foreach ($perGradeLevel as $glId => $gl): ?>
+  <?php $chartLabels = array_map(fn($k) => [$bandLabels[$k], '(' . $bandRanges[$k] . ')'], $bandKeys); ?>
+  <?php foreach ($perGradeLevel as $glId => $gl): $chartBands = $perGradeLevelChart[$glId] ?? array_fill_keys($bandKeys, ['M' => 0, 'F' => 0]); ?>
   plCharts.push(new Chart(document.getElementById('pl-chart-<?= (int) $glId ?>'), {
     type: 'bar',
     data: {
       labels: <?= json_encode($chartLabels) ?>,
       datasets: [
-        { label: 'Male', data: <?= json_encode(array_column($gl['bands'], 'M')) ?>, backgroundColor: '#4f46e5' },
-        { label: 'Female', data: <?= json_encode(array_column($gl['bands'], 'F')) ?>, backgroundColor: '#f472b6' }
+        { label: 'Male', data: <?= json_encode(array_values(array_map(fn($k) => $chartBands[$k]['M'], $bandKeys))) ?>, backgroundColor: '#4f46e5' },
+        { label: 'Female', data: <?= json_encode(array_values(array_map(fn($k) => $chartBands[$k]['F'], $bandKeys))) ?>, backgroundColor: '#f472b6' }
       ]
     },
     options: {
