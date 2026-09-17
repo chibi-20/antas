@@ -17,10 +17,9 @@ $data = get_consolidated_data($sectionId, (int) $section['school_year_id'], $ter
 $year = active_school_year();
 
 // Only fetched in 2up mode — the 4up layout never shows remarks at all. Every term up through
-// the one being viewed, so switching to Term 2/3 doesn't hide Term 1's remark — same "show
-// prior terms too" pattern the grades table already uses. Kept to one signature line (for the
-// term actually being printed) rather than one per term too, both to fit the fixed slip height
-// and because re-signing an already-handed-out term's slip isn't a real workflow.
+// the one being viewed, so switching to Term 2/3 doesn't lose Term 1's remark — it stays
+// visible, stacked below, each labeled with its own term badge. Signatures get one line per
+// term for the same reason (see the loop in render_card_slip_inner()).
 $remarksByStudent = [];
 if ($mode === '2up' && $data['students']) {
     $placeholders = implode(',', array_fill(0, count($data['students']), '?'));
@@ -34,16 +33,21 @@ if ($mode === '2up' && $data['students']) {
 }
 
 /**
- * Renders one slip's shared inner markup (header, student info, grades table, general-average
- * footer, descriptor legend) — used by both the 4-per-sheet and 2-per-sheet loops below so they
- * can never quietly drift apart into two different-looking slips. $remarksByTerm null means
- * "don't render a remarks/signature section at all" (4up mode); an array (possibly with gaps,
- * term => text) means "render one labeled row per term through the one being viewed, plus a
- * single Parent/Guardian signature line for the term actually being printed" (2up mode).
+ * Renders one slip's shared inner markup — used by both the 4-per-sheet and 2-per-sheet loops
+ * below so they can never quietly drift apart into two different-looking slips.
+ * $remarksByTerm null means "don't render a remarks/signature column at all, and don't split
+ * the slip into halves" (4up mode); an array (term => text, possibly with gaps) means "render
+ * one remark entry AND one labeled Parent/Guardian signature line per term through the one
+ * being viewed" (2up mode) — the whole slip is then explicitly split left/right into a grades
+ * half (header/student/table/footer/legend) and a remarks half (.print-page-2up's own CSS
+ * gives each exactly 50% of the slip's width), rather than letting the grades table's old
+ * flex:1 stretch fill whatever space happened to be left over in an unpredictable spot.
  */
 function render_card_slip_inner(array $student, array $section, array $data, int $term, string $yearLabel, ?array $remarksByTerm): void
 {
+    $isTwoUp = $remarksByTerm !== null;
     ?>
+    <div class="<?= $isTwoUp ? 'slip-grades' : '' ?>">
     <div class="slip-header">
       <img src="<?= h(url('/assets/img/school_logo.png')) ?>" alt="" class="slip-logo" onerror="this.style.display='none'">
       <div class="slip-header-text">
@@ -104,15 +108,25 @@ function render_card_slip_inner(array $student, array $section, array $data, int
       <div>General Average: <strong class="<?= $avg !== null ? grade_display_class((float) $avg) : '' ?>"><?= $avg !== null ? h($avg) : '—' ?></strong><?php if ($avg !== null): ?><span class="descriptor">(<?= h(grade_descriptor_letter((float) $avg)) ?>)</span><?php endif; ?></div>
     </div>
     <div class="slip-legend"><?= h(GRADE_DESCRIPTOR_LEGEND) ?></div>
-    <?php if ($remarksByTerm !== null): ?>
-    <div class="slip-remarks">
-      <div class="slip-remarks-label">Teacher's Comments / Remarks</div>
-      <?php for ($t = 1; $t <= $term; $t++): $rt = $remarksByTerm[$t] ?? ''; ?>
-      <div class="slip-remarks-row"><span class="slip-remarks-term">T<?= $t ?>:</span> <?= $rt !== '' ? h($rt) : '—' ?></div>
-      <?php endfor; ?>
     </div>
-    <div class="slip-signature-row">
-      <span class="slip-remarks-term">Parent's/Guardian's Signature:</span> <span class="slip-signature-line"></span>
+    <?php if ($isTwoUp): ?>
+    <div class="slip-remarks-block">
+      <div class="slip-remarks-history">
+        <?php for ($t = 1; $t <= $term; $t++): $rt = $remarksByTerm[$t] ?? ''; ?>
+        <div class="slip-remarks-entry">
+          <div class="slip-remarks-label">Teacher's Comments / Remarks <span class="slip-remarks-term-badge">Term <?= $t ?></span></div>
+          <div class="slip-remarks-row"><?= $rt !== '' ? h($rt) : '—' ?></div>
+        </div>
+        <?php endfor; ?>
+      </div>
+      <div class="slip-signatures">
+        <div class="slip-remarks-label">Parent's/Guardian's Signature</div>
+        <?php for ($t = 1; $t <= $term; $t++): ?>
+        <div class="slip-signature-row">
+          <span class="slip-remarks-term">T<?= $t ?>:</span> <span class="slip-signature-line"></span>
+        </div>
+        <?php endfor; ?>
+      </div>
     </div>
     <?php endif; ?>
     <?php

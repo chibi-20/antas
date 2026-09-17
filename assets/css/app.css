@@ -87,32 +87,73 @@ html.dark .js-just-pasted {
   margin: 0 auto 8mm auto;
 }
 
-.slip-remarks { border-top: 1px dashed #cbd5e1; margin-top: 4px; padding-top: 3px; font-size: 10px; }
-.slip-remarks-label { font-size: 8px; text-transform: uppercase; letter-spacing: 0.03em; color: #94a3b8; margin-bottom: 1px; }
-.slip-remarks-row { line-height: 1.15; }
+/* The 2-per-sheet slip is explicitly split left/right into two equal halves — .slip-grades
+   (header through the descriptor legend) on the left and .slip-remarks-block (this term's
+   remark + one signature line per term) on the right, matching the school's own reference
+   layout. .slip itself switches to a row flex container below (only in 2up mode — 4up's .slip
+   has no .slip-grades/.slip-remarks-block wrapper at all, see render_card_slip_inner()), so
+   these two become side-by-side columns instead of stacked halves.
+   overflow:hidden on both matches .slip's own overflow policy: a column that's too full to fit
+   is CLIPPED rather than pushed into (or shrinking) the other column. */
+.print-page-2up .slip { flex-direction: row; }
+.print-page-2up .slip-grades,
+.print-page-2up .slip-remarks-block {
+  flex: 1 1 50%;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+/* Grades content (header through legend) doesn't naturally fill the slip's full height, which
+   used to leave a large dead gap below the legend — centered vertically instead so the leftover
+   space is split evenly above/below rather than dumped at the bottom. */
+.print-page-2up .slip-grades {
+  justify-content: center;
+}
+.print-page-2up .slip-remarks-block {
+  border-left: 1px dashed #cbd5e1;
+  padding-left: 8px;
+  margin-left: 8px;
+}
+
+/* .slip-remarks-history grows to fill all the space above .slip-signatures and stacks one
+   .slip-remarks-entry per term through the one being viewed — so switching to Term 2/3 never
+   loses an earlier term's remark, it just stays visible above the newer one. */
+.slip-remarks-history { font-size: 10px; flex: 1; display: flex; flex-direction: column; }
+.slip-remarks-entry { padding: 4px 0; border-bottom: 1px dashed #e2e8f0; }
+.slip-remarks-entry:last-child { border-bottom: none; }
+.slip-remarks-label { font-size: 8px; text-transform: uppercase; letter-spacing: 0.03em; color: #64748b; font-weight: 700; text-align: center; margin-bottom: 4px; }
+/* Small pill next to each remark's label naming the term it belongs to, so it stays legible and
+   unmistakable regardless of how large or small the label text itself is set. */
+.slip-remarks-term-badge { display: inline-block; margin-left: 4px; padding: 1px 6px; border-radius: 999px; background: #ede9fe; color: #6d28d9; font-weight: 700; letter-spacing: 0; }
+.slip-remarks-row { line-height: 1.3; }
 .slip-remarks-term { font-weight: 600; margin-right: 2px; }
 
-/* Parent's/Guardian's Signature — one blank line for physical signing (no data behind it,
-   unlike .slip-remarks), for the term being printed. */
-.slip-signature-row { display: flex; align-items: flex-end; gap: 6px; margin-top: 3px; }
+/* Parent's/Guardian's Signature — one blank line per term shown in .slip-remarks above it, so
+   a parent can sign off on each term's remarks separately even though all of them stay visible
+   on every term's printed slip. */
+.slip-signatures { margin-top: 6px; }
+.slip-signature-row { display: flex; align-items: flex-end; gap: 6px; margin-top: 5px; }
 .slip-signature-line { flex: 1; border-bottom: 1px solid #94a3b8; height: 1px; }
 
 /* The 2-per-sheet slip is roughly double the width of the 4-per-sheet one but was inheriting
    the exact same (small, tuned-for-a-quarter-page) font sizes from .slip and friends — scaled
    up here (~35-40%) now that there's the room for it, scoped to this layout only so the
    original 4-per-sheet slip's tighter fit is never affected. */
-.print-page-2up .slip { font-size: 13px; }
-.print-page-2up .slip-logo { width: 38px; height: 38px; }
+.print-page-2up .slip { font-size: 14px; }
+.print-page-2up .slip-logo { width: 40px; height: 40px; }
 .print-page-2up .slip-deped-line { font-size: 8px; }
 .print-page-2up .slip-school-name { font-size: 9px; }
-.print-page-2up .slip-title { font-size: 16px; }
-.print-page-2up .slip-sub { font-size: 11.5px; }
+.print-page-2up .slip-title { font-size: 17px; }
+.print-page-2up .slip-sub { font-size: 12px; }
 .print-page-2up .descriptor { font-size: 10px; }
-.print-page-2up .slip-legend { font-size: 8px; margin-top: 1px; }
-.print-page-2up .slip-remarks { font-size: 11px; margin-top: 2px; padding-top: 2px; }
-.print-page-2up .slip-remarks-label { font-size: 9px; }
-.print-page-2up .slip-signature-row { font-size: 11.5px; margin-top: 2px; }
-.print-page-2up .slip-table th, .print-page-2up .slip-table td { padding: 0px 4px; line-height: 1.05; }
+.print-page-2up .slip-legend { font-size: 8px; margin-top: 4px; }
+.print-page-2up .slip-remarks-history { font-size: 11px; padding: 0 6px; }
+.print-page-2up .slip-remarks-label { font-size: 8px; }
+.print-page-2up .slip-remarks-row { font-size: 12px; line-height: 1.35; text-align: left; }
+.print-page-2up .slip-signature-row { font-size: 11px; margin-top: 8px; }
+.print-page-2up .slip-table th, .print-page-2up .slip-table td { padding: 1px 4px; line-height: 1.15; }
 .print-page-2up .slip-header { margin-bottom: 2px; padding-bottom: 1px; }
 .print-page-2up .slip-student { margin-bottom: 2px; line-height: 1.15; }
 .print-page-2up .slip-footer { margin-top: 2px; padding-top: 1px; }
@@ -125,7 +166,7 @@ html.dark .js-just-pasted {
 .slip-title { font-weight: 600; font-size: 13px; margin-top: 2px; }
 .slip-sub { color: #64748b; font-size: 10px; }
 .slip-student { margin-bottom: 6px; line-height: 1.4; }
-.slip-table { width: 100%; border-collapse: collapse; flex: 1; }
+.slip-table { width: 100%; border-collapse: collapse; }
 .slip-table th, .slip-table td { text-align: center; padding: 2px 4px; border-bottom: 1px solid #e2e8f0; }
 .slip-table th:first-child, .slip-table td:first-child { text-align: left; }
 .pending { color: #d97706; font-style: italic; }
