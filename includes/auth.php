@@ -118,10 +118,11 @@ function require_role(array $roles): array
  * Adviser guard: being an adviser is a capability (sections.adviser_id), not a separate
  * role — any subject_teacher can be an adviser for zero or more sections. Returns the
  * section row (with grade_level resolved from grade_levels for callers that display it).
+ * Admin has no bypass: a section's grades/remarks belong to its adviser only.
  */
 function require_own_section(int $sectionId): array
 {
-    $user = require_role(['subject_teacher', 'admin']);
+    $user = require_role(['subject_teacher']);
     $stmt = db()->prepare('SELECT sec.*, gl.name AS grade_level FROM sections sec
         JOIN grade_levels gl ON gl.id = sec.grade_level_id WHERE sec.id = ?');
     $stmt->execute([$sectionId]);
@@ -129,7 +130,7 @@ function require_own_section(int $sectionId): array
     if (!$section) {
         forbidden('Section not found.');
     }
-    if ($user['role'] !== 'admin' && (int) $section['adviser_id'] !== $user['id']) {
+    if ((int) $section['adviser_id'] !== $user['id']) {
         forbidden('You are not the adviser of this section.');
     }
     return $section;
@@ -137,20 +138,12 @@ function require_own_section(int $sectionId): array
 
 /**
  * Head Teacher guard: supervising a subject is a capability (head_teacher_assignments),
- * not a separate role — any subject_teacher can supervise zero or more subjects.
+ * not a separate role — any subject_teacher can supervise zero or more subjects. Admin has no
+ * bypass: reviewing/publishing grades belongs to the assigned Head Teacher only.
  */
 function require_supervised_subject(int $subjectId, int $schoolYearId): array
 {
-    $user = require_role(['subject_teacher', 'admin']);
-    if ($user['role'] === 'admin') {
-        $stmt = db()->prepare('SELECT * FROM subjects WHERE id = ?');
-        $stmt->execute([$subjectId]);
-        $subject = $stmt->fetch();
-        if (!$subject) {
-            forbidden('Subject not found.');
-        }
-        return $subject;
-    }
+    $user = require_role(['subject_teacher']);
     $stmt = db()->prepare('SELECT s.* FROM head_teacher_assignments hta
         JOIN subjects s ON s.id = hta.subject_id
         WHERE hta.head_teacher_id = ? AND hta.subject_id = ? AND hta.school_year_id = ? AND hta.is_active = 1');
@@ -169,7 +162,7 @@ function require_supervised_subject(int $subjectId, int $schoolYearId): array
  */
 function require_supervised_section(int $sectionId, int $schoolYearId): array
 {
-    $user = require_role(['subject_teacher', 'admin']);
+    $user = require_role(['subject_teacher']);
     $stmt = db()->prepare('SELECT sec.*, gl.name AS grade_level FROM sections sec
         JOIN grade_levels gl ON gl.id = sec.grade_level_id WHERE sec.id = ?');
     $stmt->execute([$sectionId]);
@@ -177,23 +170,24 @@ function require_supervised_section(int $sectionId, int $schoolYearId): array
     if (!$section) {
         forbidden('Section not found.');
     }
-    if ($user['role'] !== 'admin') {
-        $stmt = db()->prepare('SELECT 1 FROM section_subject_teachers sst
-            JOIN head_teacher_assignments hta ON hta.subject_id = sst.subject_id AND hta.school_year_id = sst.school_year_id
-            WHERE sst.section_id = ? AND sst.school_year_id = ? AND sst.is_active = 1
-              AND hta.head_teacher_id = ? AND hta.is_active = 1 LIMIT 1');
-        $stmt->execute([$sectionId, $schoolYearId, $user['id']]);
-        if (!$stmt->fetchColumn()) {
-            forbidden('You do not supervise any subject taught in this section.');
-        }
+    $stmt = db()->prepare('SELECT 1 FROM section_subject_teachers sst
+        JOIN head_teacher_assignments hta ON hta.subject_id = sst.subject_id AND hta.school_year_id = sst.school_year_id
+        WHERE sst.section_id = ? AND sst.school_year_id = ? AND sst.is_active = 1
+          AND hta.head_teacher_id = ? AND hta.is_active = 1 LIMIT 1');
+    $stmt->execute([$sectionId, $schoolYearId, $user['id']]);
+    if (!$stmt->fetchColumn()) {
+        forbidden('You do not supervise any subject taught in this section.');
     }
     return $section;
 }
 
-/** Subject Teacher guard: the section_subject_teachers row must belong to the current user. */
+/**
+ * Subject Teacher guard: the section_subject_teachers row must belong to the current user.
+ * Admin has no bypass: only the assigned teacher may view or edit a class record.
+ */
 function require_own_assignment(int $sectionSubjectTeacherId): array
 {
-    $user = require_role(['subject_teacher', 'admin']);
+    $user = require_role(['subject_teacher']);
     $stmt = db()->prepare('SELECT sst.*, sec.section_name, gl.name AS grade_level, sub.subject_name
         FROM section_subject_teachers sst
         JOIN sections sec ON sec.id = sst.section_id
@@ -205,7 +199,7 @@ function require_own_assignment(int $sectionSubjectTeacherId): array
     if (!$assignment) {
         forbidden('Assignment not found.');
     }
-    if ($user['role'] !== 'admin' && (int) $assignment['teacher_id'] !== $user['id']) {
+    if ((int) $assignment['teacher_id'] !== $user['id']) {
         forbidden('This is not your class.');
     }
     return $assignment;

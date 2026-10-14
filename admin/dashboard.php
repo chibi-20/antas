@@ -44,6 +44,7 @@ function stat_card(string $label, int $value, string $icon, string $colorClasses
 }
 
 $quickLinks = [
+    ['label' => 'Reporting', 'href' => '/admin/reporting.php', 'icon' => 'graduation-cap'],
     ['label' => 'School Years', 'href' => '/admin/school_years.php', 'icon' => 'calendar'],
     ['label' => 'Sections', 'href' => '/admin/sections.php', 'icon' => 'sections'],
     ['label' => 'Import Sections', 'href' => '/admin/import_sections.php', 'icon' => 'sections'],

@@ -118,6 +118,7 @@ function nav_items(array $user): array
     if ($user['role'] === 'admin') {
         return [
             'Dashboard' => 'admin/dashboard.php',
+            'Reporting' => 'admin/reporting.php',
             'School Years' => 'admin/school_years.php',
             'Grade Levels' => 'admin/grade_levels.php',
             'Majors' => 'admin/majors.php',
@@ -185,8 +186,9 @@ function nav_items(array $user): array
  *
  * Admin is the one exception: no events are ever written for admin (fanning every submission
  * out to every admin account would be noisy and wasn't asked for) — admin keeps the same live
- * school-wide "still awaiting review" backlog this bell always showed, which has no "read"
- * state since it's an ongoing count, not a personal alert.
+ * school-wide "still awaiting review" backlog this bell always showed. Its read state is a
+ * single timestamp (users.notifications_seen_at, set whenever the bell is opened): anything
+ * submitted after it is unread, so the badge only reappears when something new comes in.
  *
  * @return array<int, array{id: ?int, type: string, label: string, detail: string, time: ?string, href: string, read: bool}>
  */
@@ -209,6 +211,7 @@ function get_notifications(array $user, int $limit = 20): array
             WHERE ss.status = 'submitted_for_review' AND sst.school_year_id = ?
             ORDER BY ss.submitted_at DESC LIMIT $limit");
         $stmt->execute([$year['id']]);
+        $seenAt = notifications_seen_at((int) $user['id']);
         $notifications = [];
         foreach ($stmt->fetchAll() as $row) {
             $notifications[] = [
@@ -217,8 +220,10 @@ function get_notifications(array $user, int $limit = 20): array
                 'label' => 'Awaiting review',
                 'detail' => $row['teacher_name'] . ' · ' . $row['subject_name'] . ' · ' . $row['grade_level'] . ' - ' . $row['section_name'] . ' · Term ' . $row['term'],
                 'time' => $row['submitted_at'],
-                'href' => url('/headteacher/review.php?sst_id=' . $row['sst_id'] . '&term=' . $row['term']),
-                'read' => true,
+                // Admin can't open the Head Teacher review page (reviewing is the assigned Head
+                // Teacher's job only), so this is informational and lands on the admin dashboard.
+                'href' => url('/admin/dashboard.php'),
+                'read' => $seenAt !== null && $row['submitted_at'] !== null && $row['submitted_at'] <= $seenAt,
             ];
         }
         return $notifications;
@@ -249,15 +254,32 @@ function get_notifications(array $user, int $limit = 20): array
 }
 
 /**
- * Unread count for the top-bar badge. Admin's list above is a live backlog with no read
- * state, so admin's badge is simply its size (the bell's original behavior); everyone else's
- * badge is how many of their own persisted notifications are still unread — and goes to zero
- * the moment they open the bell (see mark_notifications_read()).
+ * Unread count for the top-bar badge — goes to zero the moment the bell is opened (see
+ * mark_notifications_read()). Admin's is how many backlog items were submitted since they
+ * last opened it; everyone else's is how many of their own persisted notifications are unread.
  */
+function notifications_seen_at(int $userId): ?string
+{
+    $stmt = db()->prepare('SELECT notifications_seen_at FROM users WHERE id = ?');
+    $stmt->execute([$userId]);
+    $seen = $stmt->fetchColumn();
+    return $seen ?: null;
+}
+
 function notification_count(array $user): int
 {
     if ($user['role'] === 'admin') {
-        return count(get_notifications($user));
+        $year = active_school_year();
+        if (!$year) {
+            return 0;
+        }
+        $stmt = db()->prepare("SELECT COUNT(*) FROM submission_status ss
+            JOIN section_subject_teachers sst ON sst.id = ss.section_subject_teacher_id
+            WHERE ss.status = 'submitted_for_review' AND sst.school_year_id = ?
+              AND (? IS NULL OR ss.submitted_at > ?)");
+        $seenAt = notifications_seen_at((int) $user['id']);
+        $stmt->execute([$year['id'], $seenAt, $seenAt]);
+        return (int) $stmt->fetchColumn();
     }
     $stmt = db()->prepare('SELECT COUNT(*) FROM notifications WHERE user_id = ? AND read_at IS NULL');
     $stmt->execute([$user['id']]);

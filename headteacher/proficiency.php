@@ -4,7 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../includes/layout.php';
 require_once __DIR__ . '/../includes/helpers.php';
 
-$user = require_role(['subject_teacher', 'admin']);
+$user = require_role(['subject_teacher']);
 $pdo = db();
 $year = require_active_school_year();
 
@@ -49,30 +49,7 @@ if ($term < 1 || $term > 3) {
 }
 
 // Section-level rollup matching the school's own summary-sheet format: rows are sections,
-// columns are bands — not the earlier band-rows/Male-Female-columns shape. Uses the same
-// five-letter descriptor scale already shown per-grade on Card Slips/Consolidated Grades
-// (GRADE_DESCRIPTOR_LEGEND), except Emerging is split further into 60-64 vs a separate
-// "At-Risk of Failing" (below 60) column, per the sheet the school actually uses. That split
-// exists ONLY on this page — GRADE_DESCRIPTOR_LEGEND itself (and the letter shown everywhere
-// else) still treats the whole 0-64 range as one Emerging band, so don't reuse these keys
-// elsewhere expecting them to line up.
-const PL_SECTION_BANDS = [
-    ['min' => 90, 'key' => 'advancing', 'label' => 'Advancing', 'range' => '90-100'],
-    ['min' => 80, 'key' => 'benchmarking', 'label' => 'Benchmarking', 'range' => '80-89'],
-    ['min' => 75, 'key' => 'connecting', 'label' => 'Connecting', 'range' => '75-79'],
-    ['min' => 65, 'key' => 'developing', 'label' => 'Developing', 'range' => '65-74'],
-    ['min' => 60, 'key' => 'emerging', 'label' => 'Emerging', 'range' => '60-64'],
-    ['min' => -1, 'key' => 'at_risk', 'label' => 'At-Risk of Failing', 'range' => 'Below 60'],
-];
-function pl_section_band(float $grade): string
-{
-    foreach (PL_SECTION_BANDS as $band) {
-        if ($grade >= $band['min']) {
-            return $band['key'];
-        }
-    }
-    return 'at_risk';
-}
+// columns are bands (PL_SECTION_BANDS in includes/helpers.php, shared with admin/reporting.php).
 $bandKeys = array_column(PL_SECTION_BANDS, 'key');
 $bandLabels = array_combine($bandKeys, array_column(PL_SECTION_BANDS, 'label'));
 $bandRanges = array_combine($bandKeys, array_column(PL_SECTION_BANDS, 'range'));
@@ -177,18 +154,6 @@ if ($subjectId && in_array($subjectId, $supervisedSubjectPickerIds, true)) {
         $perGradeLevelChart[$glId][$band][$row['sex']]++;
     }
 }
-
-// Green-to-red across the bands, from "clearing the bar comfortably" to "needs intervention
-// now" — deliberately distinct from the app's usual pass/fail red/green (grade_display_class,
-// status_badge) so a chart legend color is never mistaken for one of those other meanings.
-const PL_BAND_COLORS = [
-    'advancing' => '#16a34a',
-    'benchmarking' => '#4ade80',
-    'connecting' => '#facc15',
-    'developing' => '#fb923c',
-    'emerging' => '#f87171',
-    'at_risk' => '#dc2626',
-];
 
 $perGradeLevel = [];
 foreach ($perSection as $secId => $sec) {

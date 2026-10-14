@@ -4,7 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../includes/layout.php';
 require_once __DIR__ . '/../includes/helpers.php';
 
-$user = require_role(['subject_teacher', 'admin']);
+$user = require_role(['subject_teacher']);
 $pdo = db();
 $year = require_active_school_year();
 

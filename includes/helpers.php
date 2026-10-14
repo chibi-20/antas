@@ -26,6 +26,7 @@ function notify(int $userId, string $type, int $sstId, int $sectionId, int $term
 function mark_notifications_read(int $userId): void
 {
     db()->prepare('UPDATE notifications SET read_at = NOW() WHERE user_id = ? AND read_at IS NULL')->execute([$userId]);
+    db()->prepare('UPDATE users SET notifications_seen_at = NOW() WHERE id = ?')->execute([$userId]);
 }
 
 /**
@@ -134,6 +135,32 @@ function grade_descriptor_letter(?float $grade): ?string
 }
 
 const GRADE_DESCRIPTOR_LEGEND = 'A = Advancing (90-100)  ·  B = Benchmarking (80-89)  ·  C = Connecting (75-79)  ·  D = Developing (65-74)  ·  E = Emerging (0-64)';
+
+/**
+ * Proficiency Level bands for headteacher/proficiency.php and admin/reporting.php, matching the
+ * school's own summary sheet: the same descriptor scale as GRADE_DESCRIPTOR_LEGEND, except
+ * Emerging is split into 60-64 vs a separate "At-Risk of Failing" (below 60). That split exists
+ * only on these Proficiency Level reports — the A-E letter shown everywhere else still treats
+ * 0-64 as one Emerging band, so don't expect these keys to line up with it.
+ */
+const PL_SECTION_BANDS = [
+    ['min' => 90, 'key' => 'advancing', 'label' => 'Advancing', 'range' => '90-100'],
+    ['min' => 80, 'key' => 'benchmarking', 'label' => 'Benchmarking', 'range' => '80-89'],
+    ['min' => 75, 'key' => 'connecting', 'label' => 'Connecting', 'range' => '75-79'],
+    ['min' => 65, 'key' => 'developing', 'label' => 'Developing', 'range' => '65-74'],
+    ['min' => 60, 'key' => 'emerging', 'label' => 'Emerging', 'range' => '60-64'],
+    ['min' => -1, 'key' => 'at_risk', 'label' => 'At-Risk of Failing', 'range' => 'Below 60'],
+];
+
+function pl_section_band(float $grade): string
+{
+    foreach (PL_SECTION_BANDS as $band) {
+        if ($grade >= $band['min']) {
+            return $band['key'];
+        }
+    }
+    return 'at_risk';
+}
 
 /** Subject ids a Head Teacher supervises this school year (head_teacher_assignments). */
 function get_supervised_subject_ids(int $headTeacherId, int $schoolYearId): array
