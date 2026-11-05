@@ -98,7 +98,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     $action = $_POST['action'] ?? '';
 
-    if ($action === 'add_item') {
+    if ($action === 'convert_to_domains') {
+        $result = $subjectUsesDomains ? convert_term_to_domains($pdo, $sstId, $term) : 'not_domains';
+        if ($result === 'converted') {
+            flash_set('success', "Term $term now uses the new Values Education class record. Written Work and Performance Task start fresh; exam scores were kept.");
+        } else {
+            flash_set('error', 'This term was not changed: ' . (TERM_CONVERSION_LABELS[$result] ?? 'this subject does not use the new class record') . '.');
+        }
+    } elseif ($action === 'add_item') {
         $componentType = (string) ($_POST['component_type'] ?? '');
         $itemName = trim((string) ($_POST['item_name'] ?? ''));
         $highest = (float) ($_POST['highest_possible_score'] ?? 0);
@@ -319,17 +326,7 @@ if ($editable && (!$submission || $submission['status'] === 'not_started')) {
         $exHighest = [25, 25, 50];
         $template = [];
         if ($subjectUsesDomains) {
-            // Values Education: one item per column of the official record, numbered within
-            // its domain (e.g. "WW C1" = Written Work, Cognitive, item 1). sort_order runs across
-            // the whole component so each domain's items stay contiguous in the grid.
-            foreach (DOMAIN_LAYOUT as $type => $domains) {
-                $sort = 1;
-                foreach ($domains as $domain => $cfg) {
-                    for ($n = 1; $n <= $cfg['items']; $n++) {
-                        $template[] = [$type, $domain, "$type {$cfg['code']}$n", 100, $sort++];
-                    }
-                }
-            }
+            $template = domain_template_rows();
         } else {
             foreach (['WW 1', 'WW 2', 'WW 3', 'WW 4', 'WW 5'] as $i => $name) {
                 $template[] = ['WW', null, $name, 100, $i + 1];
@@ -491,6 +488,23 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
 <?php if (!$editable): ?>
 <div class="mb-6 px-4 py-3 rounded-lg text-sm bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
   This term is <?= h(STATUS_LABELS[$submission['status']] ?? $submission['status']) ?> and can no longer be edited.
+</div>
+<?php endif; ?>
+
+<?php if ($subjectUsesDomains && !$termUsesDomains && $items): ?>
+<?php $canConvert = $editable && term_conversion_status($pdo, $sstId, $term) === 'convertible'; ?>
+<div class="mb-6 px-4 py-3 rounded-lg text-sm bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+  <strong>This term uses the standard class record.</strong> It was started before <?= h($assignment['subject_name']) ?> switched to the domain-based class record, so it keeps its original Written Work / Performance Task / Examinations columns and is graded exactly the way it was before — including any edits.
+  <?php if ($canConvert): ?>
+  <form method="post" class="mt-3" data-confirm="Switch Term <?= $term ?> to the new Values Education class record?&#10;&#10;All Written Work and Performance Task columns and scores for this term will be removed and replaced with the new Cognitive / Affective / Behavioral columns. Exam scores are kept. This cannot be undone.">
+    <?= csrf_field() ?>
+    <input type="hidden" name="action" value="convert_to_domains">
+    <input type="hidden" name="sst_id" value="<?= $sstId ?>">
+    <input type="hidden" name="term" value="<?= $term ?>">
+    <button type="submit" class="bg-amber-600 hover:bg-amber-700 text-white font-medium px-4 py-2 rounded-lg text-sm">Switch this term to the new class record</button>
+    <span class="block mt-1 text-xs text-amber-700 dark:text-amber-400">Clears this term's Written Work and Performance Task scores (exam scores are kept). Published terms can never be switched.</span>
+  </form>
+  <?php endif; ?>
 </div>
 <?php endif; ?>
 

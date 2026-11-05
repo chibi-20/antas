@@ -208,6 +208,9 @@ if ($items) {
 }
 
 $termUsesDomains = items_use_domains($items);
+$formatStmt = $pdo->prepare('SELECT class_record_format FROM subjects WHERE id = ?');
+$formatStmt->execute([$assignment['subject_id']]);
+$subjectUsesDomains = $formatStmt->fetchColumn() === 'domains';
 [$gridColumns, $domainGroups] = class_record_columns($itemsByType, $termUsesDomains);
 $componentWeight = ['WW' => 0.0, 'PT' => 0.0];
 if ($termUsesDomains) {
@@ -305,6 +308,11 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
   </form>
 </div>
 
+<?php if ($subjectUsesDomains && !$termUsesDomains && $items): ?>
+<div class="mb-6 px-4 py-3 rounded-lg text-sm bg-amber-50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+  <strong>This term uses the standard class record.</strong> It was started before <?= h($assignment['subject_name']) ?> switched to the domain-based class record, so it keeps its original columns and is graded exactly as before, including any edits.
+</div>
+<?php endif; ?>
 <?php
   // Same colored component bands and sticky header/frozen-column grid shape as
   // teacher/class_record.php's own class record — this page shows the exact same data a

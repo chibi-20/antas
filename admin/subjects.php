@@ -63,6 +63,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare("UPDATE section_subject_teachers SET is_active = 0, retired_dedup_id = id WHERE subject_id = ? AND is_active = 1")->execute([$id]);
         }
         flash_set('success', 'Status updated.');
+    } elseif ($action === 'convert_terms') {
+        $subjectId = (int) ($_POST['subject_id'] ?? 0);
+        $term = (int) ($_POST['term'] ?? 0);
+        $year = active_school_year();
+        $isDomainSubject = $pdo->prepare("SELECT COUNT(*) FROM subjects WHERE id = ? AND class_record_format = 'domains'");
+        $isDomainSubject->execute([$subjectId]);
+        if (!$year || $term < 1 || $term > 3 || !(int) $isDomainSubject->fetchColumn()) {
+            flash_set('error', 'Pick a subject that uses the new class record, and a term.');
+        } else {
+            $classes = $pdo->prepare('SELECT id FROM section_subject_teachers WHERE subject_id = ? AND school_year_id = ? AND is_active = 1 AND (term_scope = 0 OR term_scope = ?)');
+            $classes->execute([$subjectId, $year['id'], $term]);
+            $tally = [];
+            foreach ($classes->fetchAll(PDO::FETCH_COLUMN) as $sstId) {
+                $result = convert_term_to_domains($pdo, (int) $sstId, $term);
+                $tally[$result] = ($tally[$result] ?? 0) + 1;
+            }
+            $parts = [];
+            foreach ($tally as $result => $n) {
+                $parts[] = "$n " . ($n === 1 ? 'class' : 'classes') . ': ' . TERM_CONVERSION_LABELS[$result];
+            }
+            flash_set('success', "Term $term conversion finished.\n" . ($parts ? implode("\n", $parts) : 'No classes found for this subject.'));
+        }
+        redirect('/admin/subjects.php?convert_subject=' . $subjectId . '&convert_term=' . $term . '#convert-terms');
     } elseif ($action === 'delete') {
         $id = (int) $_POST['id'];
         try {
@@ -100,6 +123,29 @@ $parentOptions = array_values(array_filter($subjects, function ($s) use ($editin
     }
     return !$editing || (int) $s['id'] !== (int) $editing['id'];
 }));
+
+// "Switch an in-progress term" preview: every class of the chosen subject this school year and
+// what converting that term would do to it, before anything is changed.
+$domainSubjects = array_values(array_filter($subjects, fn($s) => $s['class_record_format'] === 'domains' && $s['is_active']));
+$convertSubjectId = (int) ($_GET['convert_subject'] ?? ($domainSubjects[0]['id'] ?? 0));
+$convertTerm = (int) ($_GET['convert_term'] ?? 0);
+$convertPreview = [];
+$activeYear = active_school_year();
+if ($domainSubjects && $convertTerm >= 1 && $convertTerm <= 3 && $activeYear) {
+    $stmt = $pdo->prepare('SELECT sst.id, gl.name AS grade_level, sec.section_name, u.full_name AS teacher_name
+        FROM section_subject_teachers sst
+        JOIN sections sec ON sec.id = sst.section_id
+        JOIN grade_levels gl ON gl.id = sec.grade_level_id
+        JOIN users u ON u.id = sst.teacher_id
+        WHERE sst.subject_id = ? AND sst.school_year_id = ? AND sst.is_active = 1 AND (sst.term_scope = 0 OR sst.term_scope = ?)
+        ORDER BY gl.sort_order, sec.section_name');
+    $stmt->execute([$convertSubjectId, $activeYear['id'], $convertTerm]);
+    foreach ($stmt->fetchAll() as $row) {
+        $row['outcome'] = term_conversion_status($pdo, (int) $row['id'], $convertTerm);
+        $convertPreview[] = $row;
+    }
+}
+$willConvert = count(array_filter($convertPreview, fn($r) => $r['outcome'] === 'convertible'));
 
 render_header('Subjects');
 ?>
@@ -140,6 +186,62 @@ render_header('Subjects');
     </div>
   </form>
 </div>
+
+<?php if ($domainSubjects): ?>
+<div id="convert-terms" class="bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-800 rounded-xl shadow-sm p-6 mb-6">
+  <h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-1">Switch an in-progress term to the new class record</h2>
+  <p class="text-xs text-slate-400 dark:text-slate-500 mb-4">For classes that started a term on the standard record before the switch. Converting starts that term's Written Work and Performance Task over in the new Cognitive / Affective / Behavioral layout — their scores are cleared — while exam scores are kept. Submitted and published terms (including any ever reopened for an edit) are never touched. Teachers can also do this for their own class from its class record.</p>
+  <form method="get" class="flex flex-wrap items-end gap-3 mb-4">
+    <div>
+      <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Subject</label>
+      <select name="convert_subject" class="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm">
+        <?= select_options($domainSubjects, 'id', 'subject_name', $convertSubjectId) ?>
+      </select>
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Term</label>
+      <select name="convert_term" class="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg text-sm">
+        <?php for ($t = 1; $t <= 3; $t++): ?><option value="<?= $t ?>" <?= $t === $convertTerm ? 'selected' : '' ?>>Term <?= $t ?></option><?php endfor; ?>
+      </select>
+    </div>
+    <button type="submit" class="px-4 py-2 rounded-lg text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700">Preview</button>
+  </form>
+
+  <?php if ($convertTerm): ?>
+    <?php if (!$convertPreview): ?>
+    <p class="text-sm text-slate-400 dark:text-slate-500">No classes for this subject in the active school year.</p>
+    <?php else: ?>
+    <div class="overflow-x-auto border border-slate-100 dark:border-slate-700 rounded-lg mb-4">
+      <table class="w-full text-sm">
+        <thead class="bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 text-xs uppercase">
+          <tr><th class="text-left px-4 py-2">Class</th><th class="text-left px-4 py-2">Teacher</th><th class="text-left px-4 py-2">Term <?= $convertTerm ?> — what will happen</th></tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
+          <?php foreach ($convertPreview as $row): ?>
+          <tr>
+            <td class="px-4 py-2 font-medium whitespace-nowrap"><?= h($row['grade_level'] . ' - ' . $row['section_name']) ?></td>
+            <td class="px-4 py-2 text-slate-600 dark:text-slate-300"><?= h($row['teacher_name']) ?></td>
+            <td class="px-4 py-2 <?= $row['outcome'] === 'convertible' ? 'text-amber-700 dark:text-amber-300 font-medium' : 'text-slate-500 dark:text-slate-400' ?>"><?= h(TERM_CONVERSION_LABELS[$row['outcome']]) ?></td>
+          </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+    <?php if ($willConvert): ?>
+    <form method="post" data-confirm="Switch Term <?= $convertTerm ?> to the new class record for <?= $willConvert ?> class<?= $willConvert === 1 ? '' : 'es' ?>?&#10;&#10;Their Written Work and Performance Task columns and scores for this term will be removed and replaced with the new layout. Exam scores are kept. This cannot be undone.">
+      <?= csrf_field() ?>
+      <input type="hidden" name="action" value="convert_terms">
+      <input type="hidden" name="subject_id" value="<?= $convertSubjectId ?>">
+      <input type="hidden" name="term" value="<?= $convertTerm ?>">
+      <button type="submit" class="bg-amber-600 hover:bg-amber-700 text-white font-medium px-4 py-2 rounded-lg text-sm">Switch <?= $willConvert ?> class<?= $willConvert === 1 ? '' : 'es' ?> to the new class record</button>
+    </form>
+    <?php else: ?>
+    <p class="text-sm text-slate-500 dark:text-slate-400">Nothing to switch for this term.</p>
+    <?php endif; ?>
+    <?php endif; ?>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
 
 <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden">
   <table class="w-full text-sm">

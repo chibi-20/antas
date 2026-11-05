@@ -1,9 +1,101 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/gradeCalc.php';
+
 function h($value): string
 {
     return htmlspecialchars((string) $value);
+}
+
+/** The domain-based record's Written Work / Performance Task columns: [type, domain, name, highest, sort]. */
+function domain_template_rows(): array
+{
+    $rows = [];
+    foreach (DOMAIN_LAYOUT as $type => $domains) {
+        $sort = 1;
+        foreach ($domains as $domain => $cfg) {
+            for ($n = 1; $n <= $cfg['items']; $n++) {
+                // e.g. "WW C1" = Written Work, Cognitive, item 1
+                $rows[] = [$type, $domain, "$type {$cfg['code']}$n", 100, $sort++];
+            }
+        }
+    }
+    return $rows;
+}
+
+const TERM_CONVERSION_LABELS = [
+    'convertible' => 'Will switch — Written Work & Performance Task scores cleared, exam scores kept',
+    'converted' => 'Switched to the new class record',
+    'not_opened' => 'Not opened yet — will use the new class record automatically',
+    'already_new' => 'Already on the new class record',
+    'submitted' => 'Submitted for review — not changed',
+    'published' => 'Published — not changed',
+];
+
+/**
+ * Whether one class's term can be switched from the standard to the domain-based class record.
+ * Anything submitted, published, or EVER published (a published term reopened by an edit
+ * request is back to returned_for_revision, but has an edit request on record) is off limits,
+ * so published grades can never change this way.
+ *
+ * @return string a TERM_CONVERSION_LABELS key other than 'converted'
+ */
+function term_conversion_status(PDO $pdo, int $sstId, int $term): string
+{
+    $stmt = $pdo->prepare('SELECT status FROM submission_status WHERE section_subject_teacher_id = ? AND term = ?');
+    $stmt->execute([$sstId, $term]);
+    $status = $stmt->fetchColumn();
+    if ($status === 'published') {
+        return 'published';
+    }
+    if ($status === 'submitted_for_review') {
+        return 'submitted';
+    }
+    $stmt = $pdo->prepare('SELECT COUNT(*) FROM grade_edit_requests WHERE section_subject_teacher_id = ? AND term = ?');
+    $stmt->execute([$sstId, $term]);
+    if ((int) $stmt->fetchColumn() > 0) {
+        return 'published';
+    }
+    $stmt = $pdo->prepare('SELECT COUNT(*) AS total, COALESCE(SUM(domain IS NOT NULL), 0) AS with_domain FROM assessment_items WHERE section_subject_teacher_id = ? AND term = ?');
+    $stmt->execute([$sstId, $term]);
+    $counts = $stmt->fetch();
+    if ((int) $counts['total'] === 0) {
+        return 'not_opened';
+    }
+    return (int) $counts['with_domain'] > 0 ? 'already_new' : 'convertible';
+}
+
+/**
+ * Switches one class's term to the domain-based class record by starting its Written Work and
+ * Performance Task over in the new layout (their columns and scores are removed). Exams and
+ * their scores are kept — both records share ST1/ST2/TE. Does nothing unless
+ * term_conversion_status() says 'convertible'.
+ *
+ * @return string 'converted', or the term_conversion_status() reason it was left alone
+ */
+function convert_term_to_domains(PDO $pdo, int $sstId, int $term): string
+{
+    $status = term_conversion_status($pdo, $sstId, $term);
+    if ($status !== 'convertible') {
+        return $status;
+    }
+    $pdo->beginTransaction();
+    try {
+        $pdo->prepare("DELETE ss FROM student_scores ss JOIN assessment_items ai ON ai.id = ss.assessment_item_id
+            WHERE ai.section_subject_teacher_id = ? AND ai.term = ? AND ai.component_type IN ('WW', 'PT')")->execute([$sstId, $term]);
+        $pdo->prepare("DELETE FROM assessment_items WHERE section_subject_teacher_id = ? AND term = ? AND component_type IN ('WW', 'PT')")->execute([$sstId, $term]);
+        $insert = $pdo->prepare('INSERT INTO assessment_items (section_subject_teacher_id, term, component_type, domain, item_name, highest_possible_score, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)');
+        foreach (domain_template_rows() as [$type, $domain, $name, $highest, $sort]) {
+            $insert->execute([$sstId, $term, $type, $domain, $name, $highest, $sort]);
+        }
+        $pdo->commit();
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
+    recompute_term_grades_for_assignment($sstId, $term);
+    return 'converted';
 }
 
 /**
