@@ -70,6 +70,15 @@ $statusStmt->execute([$sstId, $term]);
 $submission = $statusStmt->fetch();
 $editable = !$submission || !in_array($submission['status'], ['submitted_for_review', 'published'], true);
 
+$formatStmt = $pdo->prepare('SELECT class_record_format FROM subjects WHERE id = ?');
+$formatStmt->execute([$assignment['subject_id']]);
+$subjectUsesDomains = $formatStmt->fetchColumn() === 'domains';
+// Whether THIS term was built with domains — decided by its items, not the subject's current
+// setting, so switching the setting never changes a term that's already started.
+$domainTermStmt = $pdo->prepare('SELECT COUNT(*) FROM assessment_items WHERE section_subject_teacher_id = ? AND term = ? AND domain IS NOT NULL');
+$domainTermStmt->execute([$sstId, $term]);
+$termUsesDomains = (int) $domainTermStmt->fetchColumn() > 0;
+
 // Most recent edit request for this assignment/term, if the term is published — drives the
 // "Request Edit" UI below (a pending one blocks a new request; a rejected one shows why and
 // lets the teacher try again with a new reason).
@@ -94,8 +103,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $itemName = trim((string) ($_POST['item_name'] ?? ''));
         $highest = (float) ($_POST['highest_possible_score'] ?? 0);
         // Examinations is a fixed Summative Test 1 / Summative Test 2 / Term Exam structure
-        // (see EX_WEIGHTS in gradeCalc.php) — no adding a 4th item to it.
-        if (!in_array($componentType, ['WW', 'PT'], true) || $itemName === '' || $highest <= 0) {
+        // (see EX_WEIGHTS in gradeCalc.php) — no adding a 4th item to it. A domain-based
+        // (Values Education) term is fixed in every component, matching the official record.
+        if ($termUsesDomains) {
+            flash_set('error', 'This class record has a fixed set of items per domain — items can be renamed and their highest score changed, but not added.');
+        } elseif (!in_array($componentType, ['WW', 'PT'], true) || $itemName === '' || $highest <= 0) {
             flash_set('error', 'Item name, component, and a highest possible score above 0 are required.');
         } else {
             $sort = (int) $pdo->query("SELECT COALESCE(MAX(sort_order), 0) + 1 FROM assessment_items WHERE section_subject_teacher_id = $sstId AND term = $term AND component_type = " . $pdo->quote($componentType))->fetchColumn();
@@ -108,13 +120,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $itemId = (int) $_POST['item_id'];
         // Never allow deleting an Examinations item — the fixed 3-item structure is what
         // makes the 30/30/40 weighted formula meaningful (see EX_WEIGHTS in gradeCalc.php).
-        $deleted = $pdo->prepare("DELETE FROM assessment_items WHERE id = ? AND section_subject_teacher_id = ? AND component_type <> 'EX'");
+        $deleted = $pdo->prepare("DELETE FROM assessment_items WHERE id = ? AND section_subject_teacher_id = ? AND component_type <> 'EX' AND domain IS NULL");
         $deleted->execute([$itemId, $sstId]);
         if ($deleted->rowCount() > 0) {
             recompute_term_grades_for_assignment($sstId, $term);
             flash_set('success', 'Item removed.');
         } else {
-            flash_set('error', 'Examinations items cannot be removed.');
+            flash_set('error', $termUsesDomains ? 'This class record has a fixed set of items per domain — items cannot be removed.' : 'Examinations items cannot be removed.');
         }
     } elseif ($action === 'save_scores') {
         // Column headers (name + highest score) are edited inline in the same grid/form —
@@ -282,23 +294,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if ($editable && (!$submission || $submission['status'] === 'not_started')) {
     $existingCount = $pdo->prepare('SELECT COUNT(*) FROM assessment_items WHERE section_subject_teacher_id = ? AND term = ?');
     $existingCount->execute([$sstId, $term]);
-    if ((int) $existingCount->fetchColumn() === 0) {
-        $defaults = [
-            'WW' => ['WW 1', 'WW 2', 'WW 3', 'WW 4', 'WW 5'],
-            'PT' => ['PT 1', 'PT 2', 'PT 3'],
-            'EX' => ['Summative Test 1', 'Summative Test 2', 'Term Exam'],
-        ];
+    $hasItems = (int) $existingCount->fetchColumn() > 0;
+
+    // A term that was only ever opened (items auto-created, not a single score entered) hasn't
+    // really started, so it follows the subject's CURRENT class record format — e.g. one opened
+    // before admin switched Values Education to the domain record. Once any score exists, the
+    // term keeps its structure for good.
+    if ($hasItems && $termUsesDomains !== $subjectUsesDomains) {
+        $scoredStmt = $pdo->prepare('SELECT COUNT(*) FROM student_scores ss JOIN assessment_items ai ON ai.id = ss.assessment_item_id
+            WHERE ai.section_subject_teacher_id = ? AND ai.term = ? AND ss.raw_score IS NOT NULL');
+        $scoredStmt->execute([$sstId, $term]);
+        if ((int) $scoredStmt->fetchColumn() === 0) {
+            $pdo->prepare('DELETE ss FROM student_scores ss JOIN assessment_items ai ON ai.id = ss.assessment_item_id WHERE ai.section_subject_teacher_id = ? AND ai.term = ?')
+                ->execute([$sstId, $term]);
+            $pdo->prepare('DELETE FROM assessment_items WHERE section_subject_teacher_id = ? AND term = ?')->execute([$sstId, $term]);
+            $hasItems = false;
+        }
+    }
+
+    if (!$hasItems) {
         // EX's default point totals mirror a realistic 25-item/25-item/50-item test split —
         // they're independent of the 30%/30%/40% WEIGHT breakdown gradeCalc.php applies (a
         // teacher can still edit these to match their actual test's item count).
         $exHighest = [25, 25, 50];
-        $insertDefault = $pdo->prepare('INSERT INTO assessment_items (section_subject_teacher_id, term, component_type, item_name, highest_possible_score, sort_order) VALUES (?, ?, ?, ?, ?, ?)');
-        foreach ($defaults as $type => $names) {
-            foreach ($names as $i => $name) {
-                $highest = $type === 'EX' ? $exHighest[$i] : 100;
-                $insertDefault->execute([$sstId, $term, $type, $name, $highest, $i + 1]);
+        $template = [];
+        if ($subjectUsesDomains) {
+            // Values Education: one item per column of the official record, numbered within
+            // its domain (e.g. "WW C1" = Written Work, Cognitive, item 1). sort_order runs across
+            // the whole component so each domain's items stay contiguous in the grid.
+            foreach (DOMAIN_LAYOUT as $type => $domains) {
+                $sort = 1;
+                foreach ($domains as $domain => $cfg) {
+                    for ($n = 1; $n <= $cfg['items']; $n++) {
+                        $template[] = [$type, $domain, "$type {$cfg['code']}$n", 100, $sort++];
+                    }
+                }
+            }
+        } else {
+            foreach (['WW 1', 'WW 2', 'WW 3', 'WW 4', 'WW 5'] as $i => $name) {
+                $template[] = ['WW', null, $name, 100, $i + 1];
+            }
+            foreach (['PT 1', 'PT 2', 'PT 3'] as $i => $name) {
+                $template[] = ['PT', null, $name, 100, $i + 1];
             }
         }
+        foreach (['Summative Test 1', 'Summative Test 2', 'Term Exam'] as $i => $name) {
+            $template[] = ['EX', null, $name, $exHighest[$i], $i + 1];
+        }
+        $insertDefault = $pdo->prepare('INSERT INTO assessment_items (section_subject_teacher_id, term, component_type, domain, item_name, highest_possible_score, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)');
+        foreach ($template as [$type, $domain, $name, $highest, $sort]) {
+            $insertDefault->execute([$sstId, $term, $type, $domain, $name, $highest, $sort]);
+        }
+        $termUsesDomains = $subjectUsesDomains;
     }
 }
 
@@ -328,6 +375,17 @@ if ($items) {
         $scoreLookup[$row['assessment_item_id']][$row['student_id']] = $row['raw_score'];
     }
 }
+
+// Header, rows and the PDF table all render from this one column list.
+[$gridColumns, $domainGroups] = class_record_columns($itemsByType, $termUsesDomains);
+$studentDomainPct = function (int $studentId) use ($items, $scoreLookup): array {
+    $scores = [];
+    foreach ($items as $it) {
+        $scores[(int) $it['id']] = $scoreLookup[$it['id']][$studentId] ?? null;
+    }
+    return domain_percentages($items, $scores);
+};
+$formatPct = fn(?float $p) => $p === null ? '—' : number_format($p, 2);
 
 $gradeStmt = $pdo->prepare('SELECT * FROM term_grades WHERE student_id = ? AND subject_id = ? AND term = ?');
 $componentLabels = ['WW' => 'Written Work', 'PT' => 'Performance Task', 'EX' => 'Examinations'];
@@ -468,6 +526,11 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
   <div class="flex-1">Tip: click a score cell, then paste a block of cells copied straight from Excel — it'll fill across students and items starting from that cell. Column names and highest scores are editable too (click directly on them).</div>
   <button type="button" id="paste-tip-dismiss" aria-label="Dismiss" class="flex-shrink-0 text-sky-400 dark:text-sky-500 hover:text-sky-600 dark:hover:text-sky-300 leading-none text-lg">&times;</button>
 </div>
+<?php if ($termUsesDomains): ?>
+<div class="mb-4 px-4 py-3 rounded-lg text-sm bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800">
+  Values Education class record: Written Work is split into Cognitive and Affective, Performance Tasks into Cognitive, Affective and Behavioral — each scored on its own, as in the official e-class record. Items are fixed, but you can rename them and set each one's highest score.
+</div>
+<?php else: ?>
 <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-6 mb-6">
   <h2 class="text-sm font-semibold text-slate-600 dark:text-slate-300 mb-4">Add Assessment Item</h2>
   <form method="post" class="flex flex-wrap items-end gap-3">
@@ -494,6 +557,7 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
     <button type="submit" class="bg-accent-600 hover:bg-accent-700 text-white font-medium px-4 py-2 rounded-lg text-sm">Add Item</button>
   </form>
 </div>
+<?php endif; ?>
 <?php endif; ?>
 
 <?php if ($editable): ?>
@@ -569,27 +633,47 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
         // row2 stacks right below it (top-0 + row1's own h-8 = top-8) — #6's sticky header,
         // combined with #7's grouped bands.
         $headSticky = 'sticky z-20 bg-slate-50 dark:bg-slate-800';
+        // A domain-based term adds a domain row between the component band and the item names,
+        // so the item row sticks one row lower.
+        $headRows = $termUsesDomains ? 3 : 2;
+        $itemRowTop = $termUsesDomains ? 'top-16' : 'top-8';
+        $componentWeight = ['WW' => (float) $weights['written_work_pct'], 'PT' => (float) $weights['performance_task_pct']];
       ?>
       <thead class="text-slate-500 dark:text-slate-400 text-xs uppercase">
         <tr>
-          <th rowspan="2" class="text-left px-4 py-3 sticky left-0 top-0 z-30 bg-slate-50 dark:bg-slate-800">Student</th>
+          <th rowspan="<?= $headRows ?>" class="text-left px-4 py-3 sticky left-0 top-0 z-30 bg-slate-50 dark:bg-slate-800">Student</th>
           <?php foreach (['WW', 'PT', 'EX'] as $type): ?>
             <?php if (!$itemsByType[$type]) continue; ?>
-            <th colspan="<?= count($itemsByType[$type]) ?>" class="h-8 text-center font-semibold normal-case <?= $headSticky ?> top-0 <?= $componentBandClasses[$type] ?>"><?= $componentLabels[$type] ?></th>
+            <th colspan="<?= count($gridColumns[$type]) ?>" class="h-8 text-center font-semibold normal-case <?= $headSticky ?> top-0 <?= $componentBandClasses[$type] ?>"><?= $componentLabels[$type] ?></th>
           <?php endforeach; ?>
           <?php for ($t = 1; $t < $term; $t++): ?>
-            <th rowspan="2" class="text-center px-3 py-3 whitespace-nowrap <?= $headSticky ?> top-0">Term <?= $t ?></th>
+            <th rowspan="<?= $headRows ?>" class="text-center px-3 py-3 whitespace-nowrap <?= $headSticky ?> top-0">Term <?= $t ?></th>
           <?php endfor; ?>
-          <th rowspan="2" class="text-center px-3 py-3 <?= $headSticky ?> top-0">Initial Grade</th>
-          <th rowspan="2" class="text-center px-3 py-3 <?= $headSticky ?> top-0">Transmuted Grade</th>
+          <th rowspan="<?= $headRows ?>" class="text-center px-3 py-3 <?= $headSticky ?> top-0">Initial Grade</th>
+          <th rowspan="<?= $headRows ?>" class="text-center px-3 py-3 <?= $headSticky ?> top-0">Transmuted Grade</th>
           <?php if ($term === 3): ?>
-            <th rowspan="2" class="text-center px-3 py-3 whitespace-nowrap text-accent-600 dark:text-accent-400 <?= $headSticky ?> top-0">Final Grade</th>
+            <th rowspan="<?= $headRows ?>" class="text-center px-3 py-3 whitespace-nowrap text-accent-600 dark:text-accent-400 <?= $headSticky ?> top-0">Final Grade</th>
           <?php endif; ?>
         </tr>
+        <?php if ($termUsesDomains): ?>
         <tr>
           <?php foreach (['WW', 'PT', 'EX'] as $type): ?>
-            <?php foreach ($itemsByType[$type] as $item): ?>
-              <th class="text-center px-2 py-3 whitespace-nowrap <?= $headSticky ?> top-8">
+            <?php if (!$gridColumns[$type]) continue; ?>
+            <?php if ($type === 'EX'): ?>
+              <th colspan="<?= count($gridColumns['EX']) ?>" class="h-8 text-center text-[11px] font-medium normal-case <?= $headSticky ?> top-8 <?= $componentBandClasses['EX'] ?>">ST1 30% · ST2 30% · TE 40%</th>
+            <?php else: foreach ($domainGroups[$type] as $g): ?>
+              <th colspan="<?= count($g['items']) + 1 ?>" class="h-8 text-center text-[11px] font-semibold normal-case border-l border-white/60 dark:border-slate-700 <?= $headSticky ?> top-8 <?= $componentBandClasses[$type] ?>"><?= h(domain_weight_label($type, $g['domain'], $componentWeight[$type])) ?></th>
+            <?php endforeach; endif; ?>
+          <?php endforeach; ?>
+        </tr>
+        <?php endif; ?>
+        <tr>
+          <?php foreach (['WW', 'PT', 'EX'] as $type): ?>
+            <?php foreach ($gridColumns[$type] as $colDef): ?>
+              <?php if (isset($colDef['ps'])): ?>
+              <th class="text-center px-2 py-3 whitespace-nowrap normal-case text-[11px] font-semibold <?= $headSticky ?> <?= $itemRowTop ?>" title="<?= h($colDef['label']) ?> percentage score">%</th>
+              <?php continue; endif; $item = $colDef['item']; ?>
+              <th class="text-center px-2 py-3 whitespace-nowrap <?= $headSticky ?> <?= $itemRowTop ?>">
                 <input type="text" name="item_name[<?= (int) $item['id'] ?>]" value="<?= h($item['item_name']) ?>"
                   <?= $editable ? '' : 'disabled' ?>
                   class="w-24 text-center text-xs font-semibold text-slate-600 dark:text-slate-300 normal-case border border-slate-200 dark:border-slate-600 rounded px-1 py-0.5 hover:border-accent-400 dark:hover:border-accent-500 focus:border-accent-500 outline-none bg-white dark:bg-slate-900 disabled:bg-transparent disabled:border-transparent">
@@ -598,7 +682,7 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
                   <input type="number" step="0.01" min="0.01" name="item_highest[<?= (int) $item['id'] ?>]" value="<?= h(rtrim(rtrim((string) $item['highest_possible_score'], '0'), '.')) ?>"
                     <?= $editable ? '' : 'disabled' ?>
                     class="w-10 text-center text-[10px] font-normal text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-600 rounded hover:border-accent-400 dark:hover:border-accent-500 focus:border-accent-500 outline-none bg-white dark:bg-slate-900 disabled:bg-transparent disabled:border-transparent">
-                  <?php if ($editable && $type !== 'EX'): ?>
+                  <?php if ($editable && $type !== 'EX' && !$termUsesDomains): ?>
                   <button type="submit" form="delete-item-<?= (int) $item['id'] ?>" title="Remove this item" class="p-1 rounded hover:bg-rose-50 dark:hover:bg-rose-900/30 text-rose-400 dark:text-rose-500 hover:text-rose-600 dark:hover:text-rose-400">
                     <?= icon_svg('trash', 'w-3 h-3') ?>
                   </button>
@@ -623,10 +707,14 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
                 $failingStudents[] = ['id' => (int) $student['id'], 'full_name' => $student['full_name'], 'grade' => $grade['transmuted_grade']];
             }
         ?>
+        <?php $domainPct = $termUsesDomains ? $studentDomainPct((int) $student['id']) : []; ?>
         <tr>
           <td class="px-4 py-2 font-medium whitespace-nowrap sticky left-0 z-10 bg-white dark:bg-slate-800 dark:text-slate-100"><?= h($student['full_name']) ?></td>
           <?php foreach (['WW', 'PT', 'EX'] as $type): ?>
-            <?php foreach ($itemsByType[$type] as $item): ?>
+            <?php foreach ($gridColumns[$type] as $colDef): ?>
+              <?php if (isset($colDef['ps'])): ?>
+              <td class="px-2 py-2 text-center text-xs font-medium text-slate-600 dark:text-slate-300 <?= $componentCellTint[$type] ?>" data-preview-domain="<?= (int) $student['id'] ?>-<?= $type ?>-<?= h($colDef['ps']) ?>"><?= $formatPct($domainPct[$type][$colDef['ps']] ?? null) ?></td>
+              <?php continue; endif; $item = $colDef['item']; ?>
               <td class="px-3 py-2 text-center">
                 <?php
                   $rawScore = $scoreLookup[$item['id']][$student['id']] ?? null;
@@ -677,23 +765,38 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
     <table class="text-sm min-w-full">
       <thead class="text-slate-500 text-xs uppercase">
         <tr>
-          <th rowspan="2" class="text-left px-4 py-3">Student</th>
+          <th rowspan="<?= $headRows ?>" class="text-left px-4 py-3">Student</th>
           <?php foreach (['WW', 'PT', 'EX'] as $type): ?>
             <?php if (!$itemsByType[$type]) continue; ?>
-            <th colspan="<?= count($itemsByType[$type]) ?>" class="text-center px-3 py-2 font-semibold normal-case <?= $componentBandClasses[$type] ?>"><?= $componentLabels[$type] ?></th>
+            <th colspan="<?= count($gridColumns[$type]) ?>" class="text-center px-3 py-2 font-semibold normal-case <?= $componentBandClasses[$type] ?>"><?= $componentLabels[$type] ?></th>
           <?php endforeach; ?>
           <?php for ($t = 1; $t < $term; $t++): ?>
-            <th rowspan="2" class="text-center px-3 py-3 whitespace-nowrap">Term <?= $t ?></th>
+            <th rowspan="<?= $headRows ?>" class="text-center px-3 py-3 whitespace-nowrap">Term <?= $t ?></th>
           <?php endfor; ?>
-          <th rowspan="2" class="text-center px-3 py-3">Initial Grade</th>
-          <th rowspan="2" class="text-center px-3 py-3">Transmuted Grade</th>
+          <th rowspan="<?= $headRows ?>" class="text-center px-3 py-3">Initial Grade</th>
+          <th rowspan="<?= $headRows ?>" class="text-center px-3 py-3">Transmuted Grade</th>
           <?php if ($term === 3): ?>
-            <th rowspan="2" class="text-center px-3 py-3 whitespace-nowrap text-accent-600">Final Grade</th>
+            <th rowspan="<?= $headRows ?>" class="text-center px-3 py-3 whitespace-nowrap text-accent-600">Final Grade</th>
           <?php endif; ?>
         </tr>
+        <?php if ($termUsesDomains): ?>
         <tr>
           <?php foreach (['WW', 'PT', 'EX'] as $type): ?>
-            <?php foreach ($itemsByType[$type] as $item): ?>
+            <?php if (!$gridColumns[$type]) continue; ?>
+            <?php if ($type === 'EX'): ?>
+              <th colspan="<?= count($gridColumns['EX']) ?>" class="text-center px-2 py-1 text-[11px] font-medium normal-case <?= $componentBandClasses['EX'] ?>">ST1 30% · ST2 30% · TE 40%</th>
+            <?php else: foreach ($domainGroups[$type] as $g): ?>
+              <th colspan="<?= count($g['items']) + 1 ?>" class="text-center px-2 py-1 text-[11px] font-semibold normal-case <?= $componentBandClasses[$type] ?>"><?= h(domain_weight_label($type, $g['domain'], $componentWeight[$type])) ?></th>
+            <?php endforeach; endif; ?>
+          <?php endforeach; ?>
+        </tr>
+        <?php endif; ?>
+        <tr>
+          <?php foreach (['WW', 'PT', 'EX'] as $type): ?>
+            <?php foreach ($gridColumns[$type] as $colDef): ?>
+              <?php if (isset($colDef['ps'])): ?>
+              <th class="text-center px-2 py-2 whitespace-nowrap font-semibold normal-case">%</th>
+              <?php continue; endif; $item = $colDef['item']; ?>
               <th class="text-center px-2 py-2 whitespace-nowrap font-semibold normal-case"><?= h($item['item_name']) ?> (<?= h(rtrim(rtrim((string) $item['highest_possible_score'], '0'), '.')) ?>)</th>
             <?php endforeach; ?>
           <?php endforeach; ?>
@@ -705,10 +808,14 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
         <tr><td colspan="99" class="px-4 py-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide bg-slate-50"><?= $student['sex'] === 'M' ? 'Male' : 'Female' ?></td></tr>
         <?php endif; ?>
         <?php $gradeStmt->execute([$student['id'], $assignment['subject_id'], $term]); $grade = $gradeStmt->fetch(); ?>
+        <?php $domainPct = $termUsesDomains ? $studentDomainPct((int) $student['id']) : []; ?>
         <tr>
           <td class="px-4 py-2 font-medium whitespace-nowrap"><?= h($student['full_name']) ?></td>
           <?php foreach (['WW', 'PT', 'EX'] as $type): ?>
-            <?php foreach ($itemsByType[$type] as $item): $rawScore = $scoreLookup[$item['id']][$student['id']] ?? null; ?>
+            <?php foreach ($gridColumns[$type] as $colDef): ?>
+              <?php if (isset($colDef['ps'])): ?>
+              <td class="px-2 py-2 text-center text-xs font-medium"><?= $formatPct($domainPct[$type][$colDef['ps']] ?? null) ?></td>
+              <?php continue; endif; $item = $colDef['item']; $rawScore = $scoreLookup[$item['id']][$student['id']] ?? null; ?>
               <td class="px-3 py-2 text-center"><?= $rawScore !== null ? (int) round((float) $rawScore) : '—' ?></td>
             <?php endforeach; ?>
           <?php endforeach; ?>
@@ -778,9 +885,10 @@ window.addEventListener('DOMContentLoaded', function () {
         if ($i['component_type'] === 'EX') {
             $exIndex = array_search($i['id'], array_column($itemsByType['EX'], 'id'), true);
         }
-        return ['id' => (int) $i['id'], 'type' => $i['component_type'], 'highest' => (float) $i['highest_possible_score'], 'exIndex' => $exIndex];
+        return ['id' => (int) $i['id'], 'type' => $i['component_type'], 'highest' => (float) $i['highest_possible_score'], 'exIndex' => $exIndex, 'domain' => $i['domain']];
     }, $items)) ?>,
-    students: <?= json_encode(array_map(fn($s) => (int) $s['id'], $students)) ?>
+    students: <?= json_encode(array_map(fn($s) => (int) $s['id'], $students)) ?>,
+    domainShares: <?= $termUsesDomains ? json_encode(array_map(fn($domains) => array_map(fn($d) => $d['share'], $domains), DOMAIN_LAYOUT)) : 'null' ?>
   });
   initPasteGrid();
   initGridArrowNav();

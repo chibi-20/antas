@@ -15,6 +15,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $weightProfileId = (int) ($_POST['weight_profile_id'] ?? 0);
     $parentSubjectId = (int) ($_POST['parent_subject_id'] ?? 0) ?: null;
     $sortOrder = ($_POST['sort_order'] ?? '') !== '' ? (int) $_POST['sort_order'] : 100;
+    $classRecordFormat = ($_POST['class_record_format'] ?? 'standard') === 'domains' ? 'domains' : 'standard';
     $err = ($name === '' || $code === '' || $weightProfileId === 0) ? 'All fields are required.' : null;
 
     if ($action === 'create') {
@@ -22,8 +23,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash_set('error', $err);
         } else {
             try {
-                $pdo->prepare('INSERT INTO subjects (subject_name, subject_code, weight_profile_id, parent_subject_id, sort_order) VALUES (?, ?, ?, ?, ?)')
-                    ->execute([$name, $code, $weightProfileId, $parentSubjectId, $sortOrder]);
+                $pdo->prepare('INSERT INTO subjects (subject_name, subject_code, weight_profile_id, parent_subject_id, sort_order, class_record_format) VALUES (?, ?, ?, ?, ?, ?)')
+                    ->execute([$name, $code, $weightProfileId, $parentSubjectId, $sortOrder, $classRecordFormat]);
                 flash_set('success', "Subject \"$name\" created.");
             } catch (PDOException $e) {
                 flash_set('error', 'Could not create subject — subject code may already be in use.');
@@ -38,8 +39,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash_set('error', $err);
         } else {
             try {
-                $pdo->prepare('UPDATE subjects SET subject_name=?, subject_code=?, weight_profile_id=?, parent_subject_id=?, sort_order=? WHERE id=?')
-                    ->execute([$name, $code, $weightProfileId, $parentSubjectId, $sortOrder, $id]);
+                $pdo->prepare('UPDATE subjects SET subject_name=?, subject_code=?, weight_profile_id=?, parent_subject_id=?, sort_order=?, class_record_format=? WHERE id=?')
+                    ->execute([$name, $code, $weightProfileId, $parentSubjectId, $sortOrder, $classRecordFormat, $id]);
                 flash_set('success', 'Subject updated.');
             } catch (PDOException $e) {
                 flash_set('error', 'Could not update subject — subject code may already be in use.');
@@ -126,6 +127,13 @@ render_header('Subjects');
       <option value="">None — this is a regular subject</option>
       <?= select_options($parentOptions, 'id', 'subject_name', $editing['parent_subject_id'] ?? null) ?>
     </select>
+    <label class="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">Class record format</label>
+    <?php $format = $editing['class_record_format'] ?? 'standard'; ?>
+    <select name="class_record_format" class="w-full mb-1 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg">
+      <option value="standard" <?= $format === 'standard' ? 'selected' : '' ?>>Standard (Written Work / Performance Task / Examinations)</option>
+      <option value="domains" <?= $format === 'domains' ? 'selected' : '' ?>>Values Education (Cognitive / Affective / Behavioral domains)</option>
+    </select>
+    <p class="text-xs text-slate-400 dark:text-slate-500 mb-4">Values Education format follows the official VE/GMRC e-class record: Written Work = Cognitive (5) + Affective (5); Performance Tasks = Cognitive (3) + Affective (3) + Behavioral (3); Examinations unchanged. Applies only to terms a teacher hasn't started yet — terms already started or published keep their current record and grades.</p>
     <div class="flex gap-2">
       <button type="submit" class="bg-accent-600 hover:bg-accent-700 text-white font-medium px-4 py-2 rounded-lg text-sm"><?= $editing ? 'Save Changes' : 'Add' ?></button>
       <?php if ($editing): ?><a href="<?= h(url('/admin/subjects.php')) ?>" class="px-4 py-2 rounded-lg text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700">Cancel</a><?php endif; ?>
@@ -147,6 +155,9 @@ render_header('Subjects');
             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 ml-1">Compound</span>
           <?php elseif ($s['parent_name']): ?>
             <span class="text-xs text-slate-400 dark:text-slate-500 block">Part of <?= h($s['parent_name']) ?></span>
+          <?php endif; ?>
+          <?php if ($s['class_record_format'] === 'domains'): ?>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 ml-1">Domain class record</span>
           <?php endif; ?>
         </td>
         <td class="px-4 py-3 text-slate-600 dark:text-slate-300"><?= h($s['subject_code']) ?></td>

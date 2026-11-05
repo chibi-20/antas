@@ -324,8 +324,73 @@ function initGradePreview(config) {
   // sort_order), since EX is locked to exactly Summative Test 1 / Summative Test 2 / Term
   // Exam with no reordering.
   var EX_WEIGHTS = [0.30, 0.30, 0.40];
+  // Set only for a domain-based (Values Education) term: {WW: {cognitive: 0.5, ...}, PT: {...}}
+  // — mirrors DOMAIN_LAYOUT / compute_domain_term_grade() in includes/gradeCalc.php.
+  var domainShares = config.domainShares || null;
+
+  // Unrounded initial grade -> the table row whose minimum it reaches (mirrors
+  // compute_transmuted_grade_exact(); the 6-decimal round only strips floating-point noise).
+  function lookupTransmutedExact(initial) {
+    if (initial === null) return null;
+    var v = Math.max(0, Math.min(100, Math.round(initial * 1e6) / 1e6));
+    var best = null;
+    transmutation.forEach(function (row) {
+      if (row.min <= v && (best === null || row.min > best.min)) best = row;
+    });
+    return best ? best.transmuted : null;
+  }
+
+  function recalcDomainStudent(studentId) {
+    var sums = {};
+    items.forEach(function (item) {
+      if (item.type === 'EX' || !item.domain) return;
+      var input = scoreInput(item.id, studentId);
+      if (!input || input.value === '' || isNaN(parseFloat(input.value))) return;
+      var key = item.type + '-' + item.domain;
+      sums[key] = sums[key] || { raw: 0, highest: 0 };
+      sums[key].raw += parseFloat(input.value);
+      sums[key].highest += item.highest;
+    });
+
+    var pct = {};
+    ['WW', 'PT'].forEach(function (type) {
+      var weighted = 0, shareEntered = 0;
+      Object.keys(domainShares[type]).forEach(function (domain) {
+        var s = sums[type + '-' + domain];
+        var p = (s && s.highest > 0) ? s.raw / s.highest * 100 : null;
+        var cell = document.querySelector('[data-preview-domain="' + studentId + '-' + type + '-' + domain + '"]');
+        if (cell) cell.textContent = p !== null ? p.toFixed(2) : '—';
+        if (p === null) return;
+        weighted += p * domainShares[type][domain];
+        shareEntered += domainShares[type][domain];
+      });
+      pct[type] = shareEntered > 0 ? weighted / shareEntered : null;
+    });
+
+    var exWeighted = 0, exEntered = 0;
+    items.forEach(function (item) {
+      if (item.type !== 'EX' || item.exIndex === null || item.highest <= 0) return;
+      var input = scoreInput(item.id, studentId);
+      var val = input && input.value !== '' ? parseFloat(input.value) : NaN;
+      if (isNaN(val)) return;
+      exWeighted += val / item.highest * 100 * EX_WEIGHTS[item.exIndex];
+      exEntered += EX_WEIGHTS[item.exIndex];
+    });
+    pct.EX = exEntered > 0 ? exWeighted / exEntered : null;
+
+    var initial = null;
+    if (pct.WW !== null && pct.PT !== null && pct.EX !== null) {
+      initial = (pct.WW * weights.ww + pct.PT * weights.pt + pct.EX * weights.ex) / 100;
+    }
+    return { initial: initial === null ? null : Math.round(initial * 100) / 100, transmuted: lookupTransmutedExact(initial) };
+  }
 
   function recalcStudent(studentId) {
+    if (domainShares) {
+      var domainResult = recalcDomainStudent(studentId);
+      showResult(studentId, domainResult.initial, domainResult.transmuted);
+      return;
+    }
     // Mirrors gradeCalc.php's recompute_term_grade(): a component contributes a running
     // percentage from whichever of its items are filled so far, not just once every item is
     // — so a grade (and any failing grade with it) shows up early instead of hiding behind a
@@ -384,8 +449,10 @@ function initGradePreview(config) {
     if (pct.WW !== null && pct.PT !== null && pct.EX !== null) {
       initial = Math.round((pct.WW * weights.ww + pct.PT * weights.pt + pct.EX * weights.ex) / 100 * 100) / 100;
     }
-    var transmuted = lookupTransmuted(initial);
+    showResult(studentId, initial, lookupTransmuted(initial));
+  }
 
+  function showResult(studentId, initial, transmuted) {
     var initEl = document.querySelector('[data-preview-initial="' + studentId + '"]');
     var transEl = document.querySelector('[data-preview-transmuted="' + studentId + '"]');
     if (initEl) initEl.textContent = initial !== null ? initial.toFixed(2) : '—';

@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/../includes/layout.php';
 require_once __DIR__ . '/../includes/helpers.php';
+require_once __DIR__ . '/../includes/gradeCalc.php';
 
 $user = require_role(['subject_teacher']);
 $pdo = db();
@@ -206,6 +207,23 @@ if ($items) {
     }
 }
 
+$termUsesDomains = items_use_domains($items);
+[$gridColumns, $domainGroups] = class_record_columns($itemsByType, $termUsesDomains);
+$componentWeight = ['WW' => 0.0, 'PT' => 0.0];
+if ($termUsesDomains) {
+    $weightsStmt = $pdo->prepare('SELECT wp.written_work_pct, wp.performance_task_pct FROM subjects s JOIN grade_weight_profiles wp ON wp.id = s.weight_profile_id WHERE s.id = ?');
+    $weightsStmt->execute([$assignment['subject_id']]);
+    $w = $weightsStmt->fetch();
+    $componentWeight = ['WW' => (float) $w['written_work_pct'], 'PT' => (float) $w['performance_task_pct']];
+}
+$studentDomainPct = function (int $studentId) use ($items, $scoreLookup): array {
+    $scores = [];
+    foreach ($items as $it) {
+        $scores[(int) $it['id']] = $scoreLookup[$it['id']][$studentId] ?? null;
+    }
+    return domain_percentages($items, $scores);
+};
+
 $gradeStmt = $pdo->prepare('SELECT * FROM term_grades WHERE student_id = ? AND subject_id = ? AND term = ?');
 $componentLabels = ['WW' => 'Written Work', 'PT' => 'Performance Task', 'EX' => 'Examinations'];
 
@@ -305,31 +323,48 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
       'EX' => 'bg-orange-50 dark:bg-orange-900/20',
   ];
   $headSticky = 'sticky z-20 bg-slate-50 dark:bg-slate-900';
+  $headRows = $termUsesDomains ? 3 : 2;
+  $itemRowTop = $termUsesDomains ? 'top-16' : 'top-8';
 ?>
 <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm overflow-hidden mb-6">
   <div id="grid-scroll-bottom" class="overflow-auto max-h-[70vh]">
     <table class="text-sm min-w-full">
       <thead class="text-slate-500 dark:text-slate-400 text-xs uppercase">
         <tr>
-          <th rowspan="2" class="text-left px-4 py-3 sticky left-0 top-0 z-30 bg-slate-50 dark:bg-slate-900">Student</th>
+          <th rowspan="<?= $headRows ?>" class="text-left px-4 py-3 sticky left-0 top-0 z-30 bg-slate-50 dark:bg-slate-900">Student</th>
           <?php foreach (['WW', 'PT', 'EX'] as $type): ?>
             <?php if (!$itemsByType[$type]) continue; ?>
-            <th colspan="<?= count($itemsByType[$type]) ?>" class="h-8 text-center font-semibold normal-case <?= $headSticky ?> top-0 <?= $componentBandClasses[$type] ?>"><?= $componentLabels[$type] ?></th>
+            <th colspan="<?= count($gridColumns[$type]) ?>" class="h-8 text-center font-semibold normal-case <?= $headSticky ?> top-0 <?= $componentBandClasses[$type] ?>"><?= $componentLabels[$type] ?></th>
           <?php endforeach; ?>
           <?php for ($t = 1; $t < $term; $t++): ?>
-            <th rowspan="2" class="text-center px-3 py-3 whitespace-nowrap <?= $headSticky ?> top-0">Term <?= $t ?></th>
+            <th rowspan="<?= $headRows ?>" class="text-center px-3 py-3 whitespace-nowrap <?= $headSticky ?> top-0">Term <?= $t ?></th>
           <?php endfor; ?>
-          <th rowspan="2" class="text-center px-3 py-3 <?= $headSticky ?> top-0">Initial Grade</th>
-          <th rowspan="2" class="text-center px-3 py-3 <?= $headSticky ?> top-0">Transmuted Grade</th>
+          <th rowspan="<?= $headRows ?>" class="text-center px-3 py-3 <?= $headSticky ?> top-0">Initial Grade</th>
+          <th rowspan="<?= $headRows ?>" class="text-center px-3 py-3 <?= $headSticky ?> top-0">Transmuted Grade</th>
           <?php if ($term === 3): ?>
-            <th rowspan="2" class="text-center px-3 py-3 whitespace-nowrap text-accent-600 dark:text-accent-400 <?= $headSticky ?> top-0">Final Grade</th>
+            <th rowspan="<?= $headRows ?>" class="text-center px-3 py-3 whitespace-nowrap text-accent-600 dark:text-accent-400 <?= $headSticky ?> top-0">Final Grade</th>
           <?php endif; ?>
-          <th rowspan="2" class="text-left px-3 py-3 <?= $headSticky ?> top-0">Reason (if below 75)</th>
+          <th rowspan="<?= $headRows ?>" class="text-left px-3 py-3 <?= $headSticky ?> top-0">Reason (if below 75)</th>
         </tr>
+        <?php if ($termUsesDomains): ?>
         <tr>
           <?php foreach (['WW', 'PT', 'EX'] as $type): ?>
-            <?php foreach ($itemsByType[$type] as $item): ?>
-              <th class="text-center px-2 py-2 whitespace-nowrap font-semibold normal-case <?= $headSticky ?> top-8">
+            <?php if (!$gridColumns[$type]) continue; ?>
+            <?php if ($type === 'EX'): ?>
+              <th colspan="<?= count($gridColumns['EX']) ?>" class="h-8 text-center text-[11px] font-medium normal-case <?= $headSticky ?> top-8 <?= $componentBandClasses['EX'] ?>">ST1 30% · ST2 30% · TE 40%</th>
+            <?php else: foreach ($domainGroups[$type] as $g): ?>
+              <th colspan="<?= count($g['items']) + 1 ?>" class="h-8 text-center text-[11px] font-semibold normal-case <?= $headSticky ?> top-8 <?= $componentBandClasses[$type] ?>"><?= h(domain_weight_label($type, $g['domain'], $componentWeight[$type])) ?></th>
+            <?php endforeach; endif; ?>
+          <?php endforeach; ?>
+        </tr>
+        <?php endif; ?>
+        <tr>
+          <?php foreach (['WW', 'PT', 'EX'] as $type): ?>
+            <?php foreach ($gridColumns[$type] as $colDef): ?>
+              <?php if (isset($colDef['ps'])): ?>
+              <th class="text-center px-2 py-2 whitespace-nowrap font-semibold normal-case <?= $headSticky ?> <?= $itemRowTop ?>" title="<?= h($colDef['label']) ?> percentage score">%</th>
+              <?php continue; endif; $item = $colDef['item']; ?>
+              <th class="text-center px-2 py-2 whitespace-nowrap font-semibold normal-case <?= $headSticky ?> <?= $itemRowTop ?>">
                 <?= h($item['item_name']) ?>
                 <div class="text-[10px] font-normal text-slate-400 dark:text-slate-500">/<?= rtrim(rtrim((string) $item['highest_possible_score'], '0'), '.') ?></div>
               </th>
@@ -348,10 +383,14 @@ render_header($assignment['grade_level'] . ' - ' . $assignment['section_name'] .
             $gradeStmt->execute([$student['id'], $assignment['subject_id'], $term]);
             $grade = $gradeStmt->fetch();
         ?>
+        <?php $domainPct = $termUsesDomains ? $studentDomainPct((int) $student['id']) : []; ?>
         <tr id="student-<?= (int) $student['id'] ?>">
           <td class="px-4 py-2 font-medium whitespace-nowrap sticky left-0 z-10 bg-white dark:bg-slate-800"><?= h($student['full_name']) ?></td>
           <?php foreach (['WW', 'PT', 'EX'] as $type): ?>
-            <?php foreach ($itemsByType[$type] as $item): ?>
+            <?php foreach ($gridColumns[$type] as $colDef): ?>
+              <?php if (isset($colDef['ps'])): $p = $domainPct[$type][$colDef['ps']] ?? null; ?>
+              <td class="px-2 py-2 text-center text-xs font-medium text-slate-600 dark:text-slate-300 <?= $componentCellTint[$type] ?>"><?= $p === null ? '—' : number_format($p, 2) ?></td>
+              <?php continue; endif; $item = $colDef['item']; ?>
               <td class="px-3 py-2 text-center text-slate-600 dark:text-slate-300 <?= $componentCellTint[$type] ?>"><?= h($scoreLookup[$item['id']][$student['id']] ?? '—') ?></td>
             <?php endforeach; ?>
           <?php endforeach; ?>

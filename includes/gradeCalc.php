@@ -94,6 +94,216 @@ function compute_ex_percentage(int $studentId, int $sstId, int $term): ?float
     return $weightEntered > 0 ? round($weightedSum / $weightEntered, 2) : null;
 }
 
+/**
+ * Values Education's domain-based class record (subjects.class_record_format = 'domains'),
+ * matching the school's official VE/GMRC e-class record. Each domain is scored on its own and
+ * weighted by its share of its OWN component, so the subject's weight profile still sets the
+ * WW/PT/EX split: with VE's 20/50/30 profile this is exactly the official sheet's 10%+10% (WW)
+ * and 10%+10%+30% (PT) of the term grade. Item counts are fixed per domain, like Examinations.
+ */
+const DOMAIN_LAYOUT = [
+    'WW' => [
+        'cognitive' => ['label' => 'Cognitive', 'code' => 'C', 'items' => 5, 'share' => 0.5],
+        'affective' => ['label' => 'Affective', 'code' => 'A', 'items' => 5, 'share' => 0.5],
+    ],
+    'PT' => [
+        'cognitive' => ['label' => 'Cognitive', 'code' => 'C', 'items' => 3, 'share' => 0.2],
+        'affective' => ['label' => 'Affective', 'code' => 'A', 'items' => 3, 'share' => 0.2],
+        'behavioral' => ['label' => 'Behavioral', 'code' => 'B', 'items' => 3, 'share' => 0.6],
+    ],
+];
+
+/**
+ * A component's items split into consecutive domain groups, in DOMAIN_LAYOUT order, for the
+ * class record grid's domain header row.
+ *
+ * @return array<int, array{domain: string, label: string, items: array<int, array>}>
+ */
+function domain_column_groups(string $type, array $itemsOfType): array
+{
+    $groups = [];
+    foreach (DOMAIN_LAYOUT[$type] ?? [] as $domain => $cfg) {
+        $inDomain = array_values(array_filter($itemsOfType, fn($i) => ($i['domain'] ?? null) === $domain));
+        if ($inDomain) {
+            $groups[] = ['domain' => $domain, 'label' => $cfg['label'], 'items' => $inDomain];
+        }
+    }
+    return $groups;
+}
+
+/**
+ * Grid columns per component for the class record and its review page: each item, plus — in a
+ * domain-based term — a read-only "%" column after each domain's items showing that domain's
+ * own percentage score, as the official VE record does.
+ *
+ * @return array{0: array<string, array<int, array>>, 1: array<string, array<int, array>>} [columns, domain groups]
+ */
+function class_record_columns(array $itemsByType, bool $usesDomains): array
+{
+    $columns = ['WW' => [], 'PT' => [], 'EX' => []];
+    $groups = ['WW' => [], 'PT' => []];
+    foreach (['WW', 'PT', 'EX'] as $type) {
+        if ($usesDomains && $type !== 'EX') {
+            $groups[$type] = domain_column_groups($type, $itemsByType[$type]);
+            foreach ($groups[$type] as $g) {
+                foreach ($g['items'] as $it) {
+                    $columns[$type][] = ['item' => $it];
+                }
+                $columns[$type][] = ['ps' => $g['domain'], 'label' => $g['label']];
+            }
+        } else {
+            foreach ($itemsByType[$type] as $it) {
+                $columns[$type][] = ['item' => $it];
+            }
+        }
+    }
+    return [$columns, $groups];
+}
+
+/** "Cognitive · 10%" style label: a domain's share of the whole term grade, given the component's weight. */
+function domain_weight_label(string $type, string $domain, float $componentWeight): string
+{
+    $pct = rtrim(rtrim(number_format(DOMAIN_LAYOUT[$type][$domain]['share'] * $componentWeight, 2), '0'), '.');
+    return DOMAIN_LAYOUT[$type][$domain]['label'] . ' · ' . $pct . '%';
+}
+
+/** True when a term's items were created with the domain-based class record. */
+function items_use_domains(array $items): bool
+{
+    foreach ($items as $item) {
+        if (($item['domain'] ?? null) !== null) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * One student's percentage score per domain. A domain with nothing entered yet is null rather
+ * than 0, so it's skipped instead of dragging the running grade down.
+ *
+ * @param array<int, array> $items assessment_items rows (id, component_type, domain, highest_possible_score)
+ * @param array<int, mixed> $scoresByItem item id => raw score or null
+ * @return array{WW: array<string, ?float>, PT: array<string, ?float>}
+ */
+function domain_percentages(array $items, array $scoresByItem): array
+{
+    $sums = [];
+    foreach ($items as $item) {
+        $type = $item['component_type'];
+        $domain = $item['domain'] ?? null;
+        if (!isset(DOMAIN_LAYOUT[$type][$domain])) {
+            continue;
+        }
+        $raw = $scoresByItem[(int) $item['id']] ?? null;
+        if ($raw === null || $raw === '') {
+            continue;
+        }
+        $sums[$type][$domain]['raw'] = ($sums[$type][$domain]['raw'] ?? 0.0) + (float) $raw;
+        $sums[$type][$domain]['highest'] = ($sums[$type][$domain]['highest'] ?? 0.0) + (float) $item['highest_possible_score'];
+    }
+    $result = [];
+    foreach (DOMAIN_LAYOUT as $type => $domains) {
+        foreach (array_keys($domains) as $domain) {
+            $s = $sums[$type][$domain] ?? null;
+            $result[$type][$domain] = ($s && $s['highest'] > 0) ? $s['raw'] / $s['highest'] * 100 : null;
+        }
+    }
+    return $result;
+}
+
+/** A component's percentage from its domains, using only the domains scored so far (shares renormalized). */
+function combine_domains(string $type, array $domainPcts): ?float
+{
+    $sum = 0.0;
+    $shareEntered = 0.0;
+    foreach (DOMAIN_LAYOUT[$type] as $domain => $cfg) {
+        if (($domainPcts[$domain] ?? null) === null) {
+            continue;
+        }
+        $sum += $domainPcts[$domain] * $cfg['share'];
+        $shareEntered += $cfg['share'];
+    }
+    return $shareEntered > 0 ? $sum / $shareEntered : null;
+}
+
+/**
+ * Examinations for a domain-based term: ST1/ST2/TE at 30/30/40 with no rounding of each test
+ * (the official VE record doesn't round them, whatever rounding the standard record uses),
+ * renormalized over the tests entered so far.
+ */
+function exam_percentage_exact(array $items, array $scoresByItem): ?float
+{
+    $exItems = array_values(array_filter($items, fn($i) => $i['component_type'] === 'EX'));
+    $weighted = 0.0;
+    $weightEntered = 0.0;
+    $raw = 0.0;
+    $highest = 0.0;
+    foreach ($exItems as $i => $item) {
+        $score = $scoresByItem[(int) $item['id']] ?? null;
+        if ($score === null || $score === '' || (float) $item['highest_possible_score'] <= 0) {
+            continue;
+        }
+        $raw += (float) $score;
+        $highest += (float) $item['highest_possible_score'];
+        if (count($exItems) === 3) {
+            $weighted += (float) $score / (float) $item['highest_possible_score'] * 100 * EX_WEIGHTS[$i];
+            $weightEntered += EX_WEIGHTS[$i];
+        }
+    }
+    if (count($exItems) !== 3) {
+        return $highest > 0 ? $raw / $highest * 100 : null;
+    }
+    return $weightEntered > 0 ? $weighted / $weightEntered : null;
+}
+
+/**
+ * Transmuted grade for an unrounded initial grade: the table row whose minimum it reaches. The
+ * table's 2-decimal rows leave gaps (69.99 → 70.00), so an unrounded value like 69.995 must
+ * land on the lower row — and exactly 70.00 on 75, per the DepEd table. Rounded to 6 decimals
+ * first only to strip floating-point noise (a true 70 computed as 69.99999999999999).
+ */
+function compute_transmuted_grade_exact(?float $initialGrade): ?float
+{
+    if ($initialGrade === null) {
+        return null;
+    }
+    $clamped = max(0.0, min(100.0, round($initialGrade, 6)));
+    $stmt = db()->prepare('SELECT transmuted FROM transmutation_table WHERE min_initial <= ? ORDER BY min_initial DESC LIMIT 1');
+    $stmt->execute([$clamped]);
+    $value = $stmt->fetchColumn();
+    return $value !== false ? (float) $value : null;
+}
+
+/**
+ * Full term result for a domain-based term, from one student's item rows (each row carries
+ * the item's columns plus that student's raw_score). Values are kept unrounded until the
+ * transmutation lookup, as the official sheet does, then rounded to 2 decimals for storage.
+ *
+ * @param array{written_work_pct: mixed, performance_task_pct: mixed, examination_pct: mixed} $weights
+ * @return array{WW: ?float, PT: ?float, EX: ?float, initial: ?float, transmuted: ?float}
+ */
+function compute_domain_term_grade(array $rows, array $weights): array
+{
+    $scores = [];
+    foreach ($rows as $row) {
+        $scores[(int) $row['id']] = $row['raw_score'];
+    }
+    $domainPcts = domain_percentages($rows, $scores);
+    $ww = combine_domains('WW', $domainPcts['WW']);
+    $pt = combine_domains('PT', $domainPcts['PT']);
+    $ex = exam_percentage_exact($rows, $scores);
+
+    $initial = null;
+    if ($ww !== null && $pt !== null && $ex !== null) {
+        $initial = ($ww * (float) $weights['written_work_pct']
+            + $pt * (float) $weights['performance_task_pct']
+            + $ex * (float) $weights['examination_pct']) / 100;
+    }
+    $r = fn(?float $v) => $v === null ? null : round($v, 2);
+    return ['WW' => $r($ww), 'PT' => $r($pt), 'EX' => $r($ex), 'initial' => $r($initial), 'transmuted' => compute_transmuted_grade_exact($initial)];
+}
+
 /** Recomputes and persists term_grades for one student/subject/term from student_scores. */
 function recompute_term_grade(int $studentId, int $subjectId, int $term, int $schoolYearId): void
 {
@@ -173,6 +383,23 @@ function recompute_term_grade(int $studentId, int $subjectId, int $term, int $sc
         return;
     }
     $sstId = (int) $sstId;
+
+    $rowsStmt = $pdo->prepare('SELECT ai.id, ai.component_type, ai.domain, ai.highest_possible_score, ss.raw_score
+        FROM assessment_items ai
+        LEFT JOIN student_scores ss ON ss.assessment_item_id = ai.id AND ss.student_id = ?
+        WHERE ai.section_subject_teacher_id = ? AND ai.term = ?
+        ORDER BY ai.component_type, ai.sort_order, ai.id');
+    $rowsStmt->execute([$studentId, $sstId, $term]);
+    $rows = $rowsStmt->fetchAll();
+    if (items_use_domains($rows)) {
+        $result = compute_domain_term_grade($rows, $weights);
+        $pdo->prepare('INSERT INTO term_grades (student_id, subject_id, term, ww_pct, pt_pct, ex_pct, initial_grade, transmuted_grade, school_year_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE ww_pct = VALUES(ww_pct), pt_pct = VALUES(pt_pct), ex_pct = VALUES(ex_pct),
+                initial_grade = VALUES(initial_grade), transmuted_grade = VALUES(transmuted_grade)')
+            ->execute([$studentId, $subjectId, $term, $result['WW'], $result['PT'], $result['EX'], $result['initial'], $result['transmuted'], $schoolYearId]);
+        return;
+    }
 
     // A component (WW/PT) contributes a running percentage as soon as ANY of its items has a
     // score — computed only from the items actually entered so far, not penalized for ones
