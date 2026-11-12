@@ -113,39 +113,59 @@ function avatar_initials(string $fullName): string
  * capabilities right now (sections.adviser_id / head_teacher_assignments) — they are not
  * separate exclusive roles, since a real person is very often both at once.
  */
+/**
+ * The sidebar is a list of groups so related pages sit together (e.g. Sections, Students and
+ * Majors all under "Students & Sections"). A group with a null label renders as plain links
+ * with no heading. Each labelled group collapses; the one holding the current page is always
+ * open (see render_header()).
+ *
+ * @return array<int, array{key: string, label: ?string, items: array<string, string>}>
+ */
 function nav_items(array $user): array
 {
     if ($user['role'] === 'admin') {
         return [
-            'Dashboard' => 'admin/dashboard.php',
-            'Reporting' => 'admin/reporting.php',
-            'School Years' => 'admin/school_years.php',
-            'Grade Levels' => 'admin/grade_levels.php',
-            'Majors' => 'admin/majors.php',
-            'Remarks' => 'admin/remarks.php',
-            'Sections' => 'admin/sections.php',
-            'Subjects' => 'admin/subjects.php',
-            'Weight Profiles' => 'admin/weight_profiles.php',
-            'Assignments' => 'admin/assignments.php',
-            'Head Teachers' => 'admin/head_teachers.php',
-            'Students' => 'admin/students.php',
-            'Users' => 'admin/users.php',
+            ['key' => 'overview', 'label' => null, 'items' => [
+                'Dashboard' => 'admin/dashboard.php',
+                'Reporting' => 'admin/reporting.php',
+            ]],
+            ['key' => 'students', 'label' => 'Students & Sections', 'items' => [
+                'Sections' => 'admin/sections.php',
+                'Students' => 'admin/students.php',
+                'Majors' => 'admin/majors.php',
+            ]],
+            ['key' => 'teachers', 'label' => 'Teachers', 'items' => [
+                'Users' => 'admin/users.php',
+                'Assignments' => 'admin/assignments.php',
+                'Head Teachers' => 'admin/head_teachers.php',
+            ]],
+            ['key' => 'grading', 'label' => 'Grading Setup', 'items' => [
+                'Subjects' => 'admin/subjects.php',
+                'Weight Profiles' => 'admin/weight_profiles.php',
+                'Remarks' => 'admin/remarks.php',
+            ]],
+            ['key' => 'school', 'label' => 'School Setup', 'items' => [
+                'School Years' => 'admin/school_years.php',
+                'Grade Levels' => 'admin/grade_levels.php',
+            ]],
         ];
     }
 
-    $items = ['My Classes' => 'teacher/index.php'];
+    $groups = [];
+    $teaching = ['My Classes' => 'teacher/index.php'];
     $pdo = db();
 
     $claimStmt = $pdo->prepare('SELECT 1 FROM claim_eligibility WHERE teacher_id = ? AND is_active = 1 LIMIT 1');
     $claimStmt->execute([$user['id']]);
     if ($claimStmt->fetchColumn()) {
-        $items['Claim a Class'] = 'teacher/claim.php';
+        $teaching['Claim a Class'] = 'teacher/claim.php';
     }
+    $groups[] = ['key' => 'teaching', 'label' => 'Teaching', 'items' => $teaching];
 
     $htStmt = $pdo->prepare('SELECT 1 FROM head_teacher_assignments WHERE head_teacher_id = ? AND is_active = 1 LIMIT 1');
     $htStmt->execute([$user['id']]);
     if ($htStmt->fetchColumn()) {
-        $items['Review Dashboard'] = 'headteacher/dashboard.php';
+        $groups[] = ['key' => 'headteacher', 'label' => 'Head Teacher', 'items' => ['Review Dashboard' => 'headteacher/dashboard.php']];
     }
 
     $advStmt = $pdo->prepare('SELECT id FROM sections WHERE adviser_id = ? AND is_active = 1 ORDER BY id LIMIT 2');
@@ -155,7 +175,7 @@ function nav_items(array $user): array
         // These pages need a section_id — link straight to it when there's exactly one section
         // to disambiguate; with more than one, send them to the section picker instead of
         // guessing, since a plain link to e.g. consolidated.php with no section_id 403s.
-        $items['My Section'] = 'adviser/index.php';
+        $items = ['My Section' => 'adviser/index.php'];
         if (count($advisedSections) === 1) {
             $sid = $advisedSections[0];
             $items['Consolidated Grades'] = 'adviser/consolidated.php?section_id=' . $sid;
@@ -170,9 +190,38 @@ function nav_items(array $user): array
             $items['Card Slips'] = 'adviser/index.php';
             $items['Remarks'] = 'adviser/index.php';
         }
+        $groups[] = ['key' => 'adviser', 'label' => 'Advisory', 'items' => $items];
     }
 
-    return $items;
+    // A plain teacher with nothing but "My Classes" doesn't need a heading over one link.
+    if (count($groups) === 1) {
+        $groups[0]['label'] = null;
+    }
+    return $groups;
+}
+
+/**
+ * Which nav path the current request belongs to, so the sidebar can highlight it and keep its
+ * group open. Pages reached from another page (imports, bulk assign, the class record) count
+ * as their parent page.
+ */
+function current_nav_path(): string
+{
+    $script = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+    $parts = explode('/', trim($script, '/'));
+    $path = implode('/', array_slice($parts, -2));
+    $aliases = [
+        'admin/import_sections.php' => 'admin/sections.php',
+        'admin/import_students.php' => 'admin/students.php',
+        'admin/import_teachers.php' => 'admin/users.php',
+        'admin/bulk_assign.php' => 'admin/assignments.php',
+        'teacher/class_record.php' => 'teacher/index.php',
+        'teacher/request_edit.php' => 'teacher/index.php',
+    ];
+    if (str_starts_with($path, 'headteacher/')) {
+        return 'headteacher/dashboard.php';
+    }
+    return $aliases[$path] ?? $path;
 }
 
 /**
@@ -329,11 +378,59 @@ tailwind.config = {
       <div class="font-semibold text-accent-700 dark:text-accent-300 text-lg">TAPAT</div>
       <div class="text-xs text-slate-500 dark:text-slate-400">Grade Consolidation System</div>
     </div>
-    <nav class="px-3 py-4 space-y-1 flex-1 overflow-y-auto">
-      <?php foreach (nav_items($user) as $label => $path): ?>
-        <a href="<?= htmlspecialchars(url($path)) ?>" class="block px-3 py-2 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-accent-50 dark:hover:bg-accent-900/30 hover:text-accent-700 dark:hover:text-accent-300"><?= htmlspecialchars($label) ?></a>
+    <nav id="side-nav" class="px-3 py-4 space-y-1 flex-1 overflow-y-auto">
+      <?php
+        $currentNav = current_nav_path();
+        $activeShown = false;
+        $navLink = function (string $label, string $path, bool $indent) use ($currentNav, &$activeShown): string {
+            // Several adviser links fall back to the same section picker — only light up the first.
+            $active = !$activeShown && parse_url($path, PHP_URL_PATH) === $currentNav;
+            $activeShown = $activeShown || $active;
+            $cls = $active
+                ? 'bg-accent-50 dark:bg-slate-700 text-accent-700 dark:text-white'
+                : 'text-slate-600 dark:text-slate-300 hover:bg-accent-50 dark:hover:bg-accent-900/30 hover:text-accent-700 dark:hover:text-accent-300';
+            return '<a href="' . htmlspecialchars(url($path)) . '"' . ($active ? ' aria-current="page"' : '')
+                . ' class="block ' . ($indent ? 'pl-6 pr-3 py-1.5' : 'px-3 py-2') . ' rounded-lg text-sm font-medium ' . $cls . '">'
+                . htmlspecialchars($label) . '</a>';
+        };
+      ?>
+      <?php foreach (nav_items($user) as $group): ?>
+        <?php if ($group['label'] === null): ?>
+          <?php foreach ($group['items'] as $label => $path): ?><?= $navLink($label, $path, false) ?><?php endforeach; ?>
+        <?php else:
+          $holdsCurrent = in_array($currentNav, array_map(fn($p) => parse_url($p, PHP_URL_PATH), $group['items']), true);
+        ?>
+          <details class="nav-group pt-2" data-nav-group="<?= htmlspecialchars($group['key']) ?>"<?= $holdsCurrent ? ' open data-nav-current="1"' : '' ?> data-nav-default="<?= $user['role'] === 'admin' ? 'closed' : 'open' ?>">
+            <summary class="flex items-center justify-between px-3 py-1.5 rounded-lg cursor-pointer select-none list-none text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300">
+              <span><?= htmlspecialchars($group['label']) ?></span>
+              <span class="nav-chevron transition-transform"><?= icon_svg('chevron-right', 'w-3.5 h-3.5') ?></span>
+            </summary>
+            <div class="mt-0.5 space-y-0.5">
+              <?php foreach ($group['items'] as $label => $path): ?><?= $navLink($label, $path, true) ?><?php endforeach; ?>
+            </div>
+          </details>
+        <?php endif; ?>
       <?php endforeach; ?>
     </nav>
+    <script>
+    // Groups remember being opened/closed per browser; the group holding the current page is
+    // always open. Runs inline, before first paint, so there's no flash of collapsed groups.
+    (function () {
+      document.querySelectorAll('#side-nav details[data-nav-group]').forEach(function (d) {
+        var key = 'nav-group:' + d.dataset.navGroup;
+        if (!d.dataset.navCurrent) {
+          var stored = null;
+          try { stored = localStorage.getItem(key); } catch (e) {}
+          d.open = (stored || d.dataset.navDefault) === 'open';
+        }
+        // Only a click on the heading is remembered — not the automatic opening of the group
+        // that holds the current page.
+        d.querySelector('summary').addEventListener('click', function () {
+          try { localStorage.setItem(key, d.open ? 'closed' : 'open'); } catch (e) {}
+        });
+      });
+    })();
+    </script>
     <div class="px-3 py-4 border-t border-slate-200 dark:border-slate-700">
       <div class="px-3 text-sm text-slate-700 dark:text-slate-200 font-medium"><?= htmlspecialchars($user['full_name']) ?></div>
       <div class="px-3 text-xs text-slate-400 dark:text-slate-500 mb-2"><?= htmlspecialchars(ucwords(str_replace('_', ' ', $user['role']))) ?></div>

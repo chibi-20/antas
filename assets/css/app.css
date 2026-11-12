@@ -182,3 +182,8 @@ html.dark .js-just-pasted {
   .print-page, .print-page-2up { page-break-after: always; margin: 0; width: auto; height: auto; }
   @page { size: A4 portrait; margin: 10mm; }
 }
+
+/* Sidebar nav groups (includes/layout.php) — custom chevron instead of the native marker. */
+.nav-group > summary::-webkit-details-marker { display: none; }
+.nav-group > summary::marker { content: ''; }
+.nav-group[open] .nav-chevron { transform: rotate(90deg); }
