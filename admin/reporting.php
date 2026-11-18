@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../includes/layout.php';
 require_once __DIR__ . '/../includes/helpers.php';
+require_once __DIR__ . '/../includes/reporting.php';
 
 require_role(['admin']);
 $pdo = db();
@@ -13,99 +14,43 @@ if ($term < 1 || $term > 3) {
     $term = 1;
 }
 
-// Both reports read effective_term_grades: published grades only, one row per student per
-// top-level subject (MAPEH counted once as its merged grade, never as its two components).
-// Grades are compared as the rounded whole number shown on Card Slips/Consolidated Grades, so
-// a 74.5 that prints as 75 is not counted as failing.
-$failStmt = $pdo->prepare('SELECT etg.student_id, etg.subject_id, st.full_name, st.sex,
-        sec.id AS section_id, sec.section_name, gl.id AS grade_level_id, gl.name AS grade_level, gl.sort_order AS gl_sort,
-        sub.subject_name, sub.sort_order AS sub_sort, ROUND(etg.transmuted_grade) AS grade
-    FROM effective_term_grades etg
-    JOIN students st ON st.id = etg.student_id AND st.is_active = 1
-    JOIN sections sec ON sec.id = etg.section_id
-    JOIN grade_levels gl ON gl.id = sec.grade_level_id
-    JOIN subjects sub ON sub.id = etg.subject_id
-    WHERE etg.term = ? AND etg.school_year_id = ? AND etg.transmuted_grade IS NOT NULL AND ROUND(etg.transmuted_grade) < 75');
-$failStmt->execute([$term, $year['id']]);
+$selfPath = fn(array $q = []): string => '/admin/reporting.php?' . http_build_query(['term' => $term] + $q);
+$selfUrl = fn(array $q = []): string => url($selfPath($q));
 
-$failingByStudent = [];
-foreach ($failStmt->fetchAll() as $row) {
-    $sid = (int) $row['student_id'];
-    $failingByStudent[$sid] ??= [
-        'name' => $row['full_name'],
-        'sex' => $row['sex'],
-        'section_id' => (int) $row['section_id'],
-        'section_name' => $row['section_name'],
-        'grade_level_id' => (int) $row['grade_level_id'],
-        'grade_level' => $row['grade_level'],
-        'gl_sort' => (int) $row['gl_sort'],
-        'subjects' => [],
-    ];
-    $failingByStudent[$sid]['subjects'][(int) $row['subject_id']] = [
-        'name' => $row['subject_name'],
-        'sort' => (int) $row['sub_sort'],
-        'grade' => (int) $row['grade'],
-    ];
-}
-
-$multiFail = [];
-$multiFailTotals = ['M' => 0, 'F' => 0];
-foreach ($failingByStudent as $student) {
-    if (count($student['subjects']) < 2) {
-        continue;
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    csrf_verify();
+    if (($_POST['action'] ?? '') === 'freeze') {
+        $note = trim((string) ($_POST['note'] ?? ''));
+        $note = $note === '' ? null : mb_substr($note, 0, 255);
+        $id = report_save_snapshot($pdo, (int) $year['id'], $term, 'manual', (int) current_user()['id'], $note, report_last_change($pdo, (int) $year['id'], $term));
+        flash_set('success', 'Term ' . $term . ' report frozen. This copy will not change, even if grades are corrected later.');
+        redirect($selfPath(['snapshot' => $id]));
     }
-    uasort($student['subjects'], fn($a, $b) => $a['sort'] <=> $b['sort'] ?: strcmp($a['name'], $b['name']));
-    $glId = $student['grade_level_id'];
-    $multiFail[$glId] ??= ['name' => $student['grade_level'], 'sort' => $student['gl_sort'], 'M' => 0, 'F' => 0, 'sections' => []];
-    $multiFail[$glId][$student['sex']]++;
-    $multiFail[$glId]['sections'][$student['section_id']]['name'] = $student['section_name'];
-    $multiFail[$glId]['sections'][$student['section_id']]['students'][] = $student;
-    $multiFailTotals[$student['sex']]++;
+    redirect($selfPath());
 }
-uasort($multiFail, fn($a, $b) => $a['sort'] <=> $b['sort']);
-foreach ($multiFail as &$gl) {
-    uasort($gl['sections'], fn($a, $b) => strcmp($a['name'], $b['name']));
-    foreach ($gl['sections'] as &$sec) {
-        usort($sec['students'], fn($a, $b) => strcmp($b['sex'], $a['sex']) ?: strcmp($a['name'], $b['name']));
-    }
-    unset($sec);
-}
-unset($gl);
 
-// Population for the failing-rate columns: every active learner enrolled in a section of this
-// school year, per grade level and sex. $gradedByGl counts learners with at least one published
-// grade this term, so a low rate caused by grades not being published yet is visible.
-$popStmt = $pdo->prepare('SELECT gl.id AS grade_level_id, gl.name AS grade_level, gl.sort_order AS gl_sort, st.sex, COUNT(*) AS n
-    FROM students st
-    JOIN sections sec ON sec.id = st.section_id AND sec.school_year_id = ?
-    JOIN grade_levels gl ON gl.id = sec.grade_level_id
-    WHERE st.is_active = 1
-    GROUP BY gl.id, gl.name, gl.sort_order, st.sex');
-$popStmt->execute([$year['id']]);
-$gradedStmt = $pdo->prepare('SELECT sec.grade_level_id, COUNT(DISTINCT etg.student_id) AS n
-    FROM effective_term_grades etg
-    JOIN students st ON st.id = etg.student_id AND st.is_active = 1
-    JOIN sections sec ON sec.id = etg.section_id
-    WHERE etg.term = ? AND etg.school_year_id = ? AND etg.transmuted_grade IS NOT NULL
-    GROUP BY sec.grade_level_id');
-$gradedStmt->execute([$term, $year['id']]);
-$gradedByGl = array_map('intval', array_column($gradedStmt->fetchAll(), 'n', 'grade_level_id'));
+// Automatic freezing happens here, the first time an admin opens Reporting after a term's
+// grades have gone REPORT_AUTO_FREEZE_DAYS without a change.
+$justFrozen = report_auto_freeze($pdo, (int) $year['id']);
 
-// One row per grade level that has learners, even when nobody there is failing 2+ subjects.
-$blankRate = fn(string $name, int $sort, int $glId) => ['name' => $name, 'sort' => $sort, 'pop' => ['M' => 0, 'F' => 0], 'fail' => ['M' => 0, 'F' => 0], 'graded' => $gradedByGl[$glId] ?? 0];
-$rateRows = [];
-foreach ($popStmt->fetchAll() as $row) {
-    $glId = (int) $row['grade_level_id'];
-    $rateRows[$glId] ??= $blankRate($row['grade_level'], (int) $row['gl_sort'], $glId);
-    if (isset($rateRows[$glId]['pop'][$row['sex']])) {
-        $rateRows[$glId]['pop'][$row['sex']] += (int) $row['n'];
-    }
+$live = report_build($pdo, (int) $year['id'], $term);
+$snapshots = report_snapshot_list($pdo, (int) $year['id'], $term);
+$snapshot = null;
+if ($snapshots && ($_GET['view'] ?? '') !== 'live') {
+    $wanted = (int) ($_GET['snapshot'] ?? 0);
+    $ids = array_map('intval', array_column($snapshots, 'id'));
+    $snapshot = report_snapshot_load($pdo, in_array($wanted, $ids, true) ? $wanted : $ids[0]);
 }
-foreach ($multiFail as $glId => $gl) {
-    $rateRows[$glId] ??= $blankRate($gl['name'], $gl['sort'], $glId);
-    $rateRows[$glId]['fail'] = ['M' => $gl['M'], 'F' => $gl['F']];
-}
-uasort($rateRows, fn($a, $b) => $a['sort'] <=> $b['sort']);
+$R = $snapshot['report'] ?? $live;
+
+$rateRows = $R['rateRows'];
+$multiFailTotals = $R['multiFailTotals'];
+$driverSubjects = $R['drivers'];
+$sectionRates = $R['sections'];
+$plByGradeLevel = $R['pl'];
+// Student names are never stored in a snapshot, so the expandable lists are always live.
+$multiFail = $live['students'];
+
 $popTotals = ['M' => 0, 'F' => 0];
 $gradedTotal = 0;
 foreach ($rateRows as $r) {
@@ -113,137 +58,81 @@ foreach ($rateRows as $r) {
     $popTotals['F'] += $r['pop']['F'];
     $gradedTotal += $r['graded'];
 }
-$pct = fn(int $part, int $whole): ?float => $whole > 0 ? round($part / $whole * 100, 1) : null;
-$fmtPct = fn(?float $v): string => $v === null ? '—' : rtrim(rtrim(number_format($v, 1), '0'), '.') . '%';
+$pct = fn(int $part, int $whole): ?float => report_pct($part, $whole);
+$fmtPct = fn(?float $v): string => report_pct_label($v);
+$pctLabel = fn(float $v): string => report_pct_label($v);
 $maxRate = 0.0;
 foreach ($rateRows as $r) {
     $maxRate = max($maxRate, (float) $pct($r['fail']['M'] + $r['fail']['F'], $r['pop']['M'] + $r['pop']['F']));
 }
 // Chart scale rounded up to a tidy 10% step.
 $chartMax = max(10, (int) ceil($maxRate / 10) * 10);
-$pctLabel = fn(float $v): string => rtrim(rtrim(number_format($v, 1), '0'), '.') . '%';
-
-// --- Which subjects drive it: among learners failing 2+ subjects this term, how many are
-// failing each subject, per grade level. One learner counts once per subject they fail.
-$driverSubjects = [];
-foreach ($multiFail as $glId => $gl) {
-    foreach ($gl['sections'] as $sec) {
-        foreach ($sec['students'] as $student) {
-            foreach ($student['subjects'] as $subId => $sub) {
-                $driverSubjects[$subId] ??= ['name' => $sub['name'], 'sort' => $sub['sort'], 'byGl' => [], 'total' => 0];
-                $driverSubjects[$subId]['byGl'][$glId] = ($driverSubjects[$subId]['byGl'][$glId] ?? 0) + 1;
-                $driverSubjects[$subId]['total']++;
-            }
-        }
-    }
-}
-uasort($driverSubjects, fn($a, $b) => $b['total'] <=> $a['total'] ?: $a['sort'] <=> $b['sort']);
 $driverMax = $driverSubjects ? max(array_column($driverSubjects, 'total')) : 0;
-
-// --- By section: failing-2+ rate for every section with enrolled learners, this term.
-$secPopStmt = $pdo->prepare('SELECT sec.id, sec.section_name, gl.name AS grade_level, gl.sort_order AS gl_sort, u.full_name AS adviser, COUNT(st.id) AS n
-    FROM sections sec
-    JOIN grade_levels gl ON gl.id = sec.grade_level_id
-    JOIN students st ON st.section_id = sec.id AND st.is_active = 1
-    LEFT JOIN users u ON u.id = sec.adviser_id
-    WHERE sec.school_year_id = ?
-    GROUP BY sec.id, sec.section_name, gl.name, gl.sort_order, u.full_name');
-$secPopStmt->execute([$year['id']]);
-$sectionRates = [];
-foreach ($secPopStmt->fetchAll() as $row) {
-    $fails = 0;
-    foreach ($multiFail as $gl) {
-        $fails += count($gl['sections'][(int) $row['id']]['students'] ?? []);
-    }
-    $sectionRates[] = [
-        'name' => $row['section_name'],
-        'grade_level' => $row['grade_level'],
-        'gl_sort' => (int) $row['gl_sort'],
-        'adviser' => $row['adviser'],
-        'pop' => (int) $row['n'],
-        'fail' => $fails,
-        'rate' => (float) $pct($fails, (int) $row['n']),
-    ];
-}
-usort($sectionRates, fn($a, $b) => $b['rate'] <=> $a['rate'] ?: $b['fail'] <=> $a['fail'] ?: $a['gl_sort'] <=> $b['gl_sort'] ?: strcmp($a['name'], $b['name']));
 $sectionMax = $sectionRates ? max(10, (int) ceil(max(array_column($sectionRates, 'rate')) / 10) * 10) : 10;
 
-// --- Term trend: the same failing-2+ rate for Terms 1–3 side by side, per grade level.
-// Uses this year's current enrollment as the population for every term. A term with no
-// published grades at all shows "—" rather than a misleading 0%.
-$trendStmt = $pdo->prepare('SELECT f.term, sec.grade_level_id, COUNT(*) AS n
-    FROM (SELECT etg.term, etg.student_id, MIN(etg.section_id) AS section_id
-          FROM effective_term_grades etg
-          JOIN students st ON st.id = etg.student_id AND st.is_active = 1
-          WHERE etg.school_year_id = ? AND etg.transmuted_grade IS NOT NULL AND ROUND(etg.transmuted_grade) < 75
-          GROUP BY etg.term, etg.student_id
-          HAVING COUNT(*) >= 2) f
-    JOIN sections sec ON sec.id = f.section_id
-    GROUP BY f.term, sec.grade_level_id');
-$trendStmt->execute([$year['id']]);
-$trendFail = [];
-foreach ($trendStmt->fetchAll() as $row) {
-    $trendFail[(int) $row['grade_level_id']][(int) $row['term']] = (int) $row['n'];
+// Drift: how the live numbers differ from the snapshot being viewed.
+$drift = [];
+$correctionsSince = 0;
+if ($snapshot) {
+    $was = report_totals($R);
+    $now = report_totals($live);
+    $labels = ['fail' => 'failing 2+ subjects', 'pop' => 'enrolled', 'graded' => 'learners with published grades'];
+    foreach ($labels as $k => $label) {
+        if ($was[$k] !== $now[$k]) {
+            $drift[] = $label . ': ' . number_format($now[$k]) . ' now (was ' . number_format($was[$k]) . ')';
+        }
+    }
+    $cStmt = $pdo->prepare('SELECT COUNT(*) FROM grade_edit_requests ger
+        JOIN section_subject_teachers sst ON sst.id = ger.section_subject_teacher_id
+        WHERE ger.term = ? AND sst.school_year_id = ? AND ger.finalized_at > ?');
+    $cStmt->execute([$term, $year['id'], $snapshot['created_at']]);
+    $correctionsSince = (int) $cStmt->fetchColumn();
 }
-// Which terms have any published grade, per grade level.
-$termsStmt = $pdo->prepare('SELECT DISTINCT sec.grade_level_id, etg.term FROM effective_term_grades etg
-    JOIN sections sec ON sec.id = etg.section_id
-    WHERE etg.school_year_id = ? AND etg.transmuted_grade IS NOT NULL');
-$termsStmt->execute([$year['id']]);
-$termsWithGrades = [];
-foreach ($termsStmt->fetchAll() as $row) {
-    $termsWithGrades[(int) $row['grade_level_id']][(int) $row['term']] = true;
+$lastChange = report_last_change($pdo, (int) $year['id'], $term);
+// Days are counted in MySQL: PHP and MySQL can run on different time zones.
+$quietDays = $lastChange !== null ? (int) $pdo->query('SELECT FLOOR(TIMESTAMPDIFF(SECOND, ' . $pdo->quote($lastChange) . ', NOW()) / 86400)')->fetchColumn() : null;
+
+// --- Term trend. In the frozen view, every term that has a snapshot uses its latest one (with
+// that snapshot's own enrollment); other terms, and everything in the live view, are live
+// against current enrollment. A term with no published grades shows "—", not 0%.
+$liveTrend = report_live_trend($pdo, (int) $year['id']);
+$frozenTerms = $snapshot ? report_latest_snapshots($pdo, (int) $year['id']) : [];
+if ($snapshot) {
+    $frozenTerms[$term] = $snapshot; // the snapshot on screen, even if an older one was picked
 }
 $trendRows = [];
 $trendMaxRate = 0.0;
 foreach ($rateRows as $glId => $r) {
-    $pop = $r['pop']['M'] + $r['pop']['F'];
+    $livePop = (int) ($live['rateRows'][$glId]['pop']['M'] ?? 0) + (int) ($live['rateRows'][$glId]['pop']['F'] ?? 0);
     $rates = [];
+    $fails = [];
+    $isFrozen = [];
     for ($t = 1; $t <= 3; $t++) {
-        $rates[$t] = isset($termsWithGrades[$glId][$t]) ? $pct($trendFail[$glId][$t] ?? 0, $pop) : null;
+        if (isset($frozenTerms[$t])) {
+            $fr = $frozenTerms[$t]['report']['rateRows'][$glId] ?? null;
+            $f = $fr ? $fr['fail']['M'] + $fr['fail']['F'] : 0;
+            $rates[$t] = $fr && $fr['graded'] > 0 ? $pct($f, $fr['pop']['M'] + $fr['pop']['F']) : null;
+            $isFrozen[$t] = true;
+        } else {
+            $f = $liveTrend['fail'][$glId][$t] ?? 0;
+            $rates[$t] = isset($liveTrend['has'][$glId][$t]) ? $pct($f, $livePop) : null;
+            $isFrozen[$t] = false;
+        }
+        $fails[$t] = $f;
         $trendMaxRate = max($trendMaxRate, (float) $rates[$t]);
     }
-    $trendRows[$glId] = ['name' => $r['name'], 'rates' => $rates, 'fail' => $trendFail[$glId] ?? []];
+    $trendRows[$glId] = ['name' => $r['name'], 'rates' => $rates, 'fail' => $fails, 'frozen' => $isFrozen];
 }
 $trendMax = max(10, (int) ceil($trendMaxRate / 10) * 10);
 // Three ordered shades of one hue: later terms are darker.
 $trendShades = [1 => 'bg-rose-200 dark:bg-rose-900', 2 => 'bg-rose-400 dark:bg-rose-600', 3 => 'bg-rose-600 dark:bg-rose-400'];
 
-$plStmt = $pdo->prepare('SELECT gl.id AS grade_level_id, gl.name AS grade_level, gl.sort_order AS gl_sort,
-        sub.id AS subject_id, sub.subject_name, sub.sort_order AS sub_sort,
-        ROUND(etg.transmuted_grade) AS grade, COUNT(*) AS n
-    FROM effective_term_grades etg
-    JOIN students st ON st.id = etg.student_id AND st.is_active = 1
-    JOIN sections sec ON sec.id = etg.section_id
-    JOIN grade_levels gl ON gl.id = sec.grade_level_id
-    JOIN subjects sub ON sub.id = etg.subject_id
-    WHERE etg.term = ? AND etg.school_year_id = ? AND etg.transmuted_grade IS NOT NULL
-    GROUP BY gl.id, gl.name, gl.sort_order, sub.id, sub.subject_name, sub.sort_order, ROUND(etg.transmuted_grade)');
-$plStmt->execute([$term, $year['id']]);
-
 $bandKeys = array_column(PL_SECTION_BANDS, 'key');
 $bandLabels = array_combine($bandKeys, array_column(PL_SECTION_BANDS, 'label'));
 $bandRanges = array_combine($bandKeys, array_column(PL_SECTION_BANDS, 'range'));
 
-$plByGradeLevel = [];
-foreach ($plStmt->fetchAll() as $row) {
-    $glId = (int) $row['grade_level_id'];
-    $subId = (int) $row['subject_id'];
-    $plByGradeLevel[$glId] ??= ['name' => $row['grade_level'], 'sort' => (int) $row['gl_sort'], 'subjects' => []];
-    $plByGradeLevel[$glId]['subjects'][$subId] ??= [
-        'name' => $row['subject_name'],
-        'sort' => (int) $row['sub_sort'],
-        'bands' => array_fill_keys($bandKeys, 0),
-    ];
-    $plByGradeLevel[$glId]['subjects'][$subId]['bands'][pl_section_band((float) $row['grade'])] += (int) $row['n'];
-}
-uasort($plByGradeLevel, fn($a, $b) => $a['sort'] <=> $b['sort']);
-foreach ($plByGradeLevel as &$gl) {
-    uasort($gl['subjects'], fn($a, $b) => $a['sort'] <=> $b['sort'] ?: strcmp($a['name'], $b['name']));
-}
-unset($gl);
-
 $multiFailTotal = $multiFailTotals['M'] + $multiFailTotals['F'];
+$fmtWhen = fn(?string $ts): string => $ts ? date('M j, Y g:i A', strtotime($ts)) : '—';
 
 render_header('Reporting', 'School-wide reports from published grades · ' . $year['year_label'] . ' · Term ' . $term . '.');
 ?>
@@ -252,6 +141,83 @@ render_header('Reporting', 'School-wide reports from published grades · ' . $ye
     <button type="submit" name="term" value="<?= $t ?>" class="px-3 py-1.5 rounded-lg text-sm <?= $t === $term ? 'bg-accent-600 text-white' : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700' ?>">Term <?= $t ?></button>
   <?php endfor; ?>
 </form>
+
+<?php if ($justFrozen): ?>
+<div class="mb-4 px-4 py-3 rounded-lg text-sm bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+  Automatically froze the report for Term <?= h(implode(', Term ', $justFrozen)) ?>: its grades went <?= REPORT_AUTO_FREEZE_DAYS ?> days without any change.
+</div>
+<?php endif; ?>
+
+<div class="mb-8 rounded-xl border <?= $snapshot ? 'border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/40' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800' ?> p-4 shadow-sm">
+  <div class="flex flex-wrap items-start gap-4 justify-between">
+    <div class="min-w-0 flex-1">
+      <?php if ($snapshot): ?>
+        <div class="flex items-center gap-2 font-semibold text-indigo-800 dark:text-indigo-200 text-sm">
+          <?= icon_svg('lock', 'w-4 h-4') ?> Frozen report · <?= h($fmtWhen($snapshot['created_at'])) ?>
+        </div>
+        <div class="text-xs text-indigo-700/80 dark:text-indigo-300/80 mt-1">
+          <?php if ($snapshot['trigger_type'] === 'auto'): ?>
+            Frozen automatically after <?= REPORT_AUTO_FREEZE_DAYS ?> days without grade changes.
+          <?php else: ?>
+            Frozen manually<?php $by = current(array_filter($snapshots, fn($s) => (int) $s['id'] === (int) $snapshot['id'])); ?><?= $by && $by['created_by_name'] ? ' by ' . h($by['created_by_name']) : '' ?>.
+          <?php endif; ?>
+          <?php if ($snapshot['note'] && $snapshot['trigger_type'] === 'manual'): ?> Note: “<?= h($snapshot['note']) ?>”.<?php endif; ?>
+          Includes grade changes up to <?= h($fmtWhen($snapshot['data_as_of'])) ?>. These numbers will not change.
+        </div>
+        <?php if ($drift || $correctionsSince): ?>
+        <div class="mt-2 text-xs text-amber-700 dark:text-amber-300">
+          Live data has changed since this snapshot<?= $correctionsSince ? ' — ' . $correctionsSince . ' grade correction' . ($correctionsSince === 1 ? '' : 's') . ' republished' : '' ?><?= $drift ? ($correctionsSince ? '; ' : ' — ') . h(implode('; ', $drift)) : '' ?>.
+        </div>
+        <?php else: ?>
+        <div class="mt-2 text-xs text-slate-500 dark:text-slate-400">Live numbers still match this snapshot.</div>
+        <?php endif; ?>
+      <?php else: ?>
+        <div class="font-semibold text-slate-700 dark:text-slate-200 text-sm">Live report</div>
+        <div class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+          <?php if ($snapshots): ?>
+            Showing current numbers. Term <?= $term ?> has <?= count($snapshots) ?> frozen snapshot<?= count($snapshots) === 1 ? '' : 's' ?>.
+          <?php elseif ($lastChange === null): ?>
+            No published grades for Term <?= $term ?> yet.
+          <?php else: ?>
+            Not frozen yet. This term freezes automatically once its grades go <?= REPORT_AUTO_FREEZE_DAYS ?> days without any change
+            — last change <?= h($fmtWhen($lastChange)) ?> (<?= $quietDays === 0 ? 'today' : $quietDays . ' day' . ($quietDays === 1 ? '' : 's') . ' ago' ?>).
+          <?php endif; ?>
+        </div>
+      <?php endif; ?>
+    </div>
+    <div class="flex flex-wrap items-center gap-2">
+      <?php if ($snapshots): ?>
+        <div class="inline-flex rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden text-sm">
+          <a href="<?= h($selfUrl()) ?>" class="px-3 py-1.5 <?= $snapshot ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700' ?>">Frozen</a>
+          <a href="<?= h($selfUrl(['view' => 'live'])) ?>" class="px-3 py-1.5 <?= $snapshot ? 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700' : 'bg-indigo-600 text-white' ?>">Live</a>
+        </div>
+      <?php endif; ?>
+      <?php if ($snapshot && count($snapshots) > 1): ?>
+        <form method="get" class="inline">
+          <input type="hidden" name="term" value="<?= $term ?>">
+          <select name="snapshot" onchange="this.form.submit()" class="text-sm rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-2 py-1.5">
+            <?php foreach ($snapshots as $s): ?>
+              <option value="<?= (int) $s['id'] ?>" <?= (int) $s['id'] === (int) $snapshot['id'] ? 'selected' : '' ?>><?= h($fmtWhen($s['created_at'])) ?> · <?= $s['trigger_type'] === 'auto' ? 'Auto' : 'Manual' ?></option>
+            <?php endforeach; ?>
+          </select>
+        </form>
+      <?php endif; ?>
+      <a href="<?= h(url('/admin/reporting_export.php') . '?' . http_build_query($snapshot ? ['snapshot' => $snapshot['id']] : ['term' => $term])) ?>" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"><?= icon_svg('download', 'w-4 h-4') ?> Download CSV</a>
+    </div>
+  </div>
+  <?php if ($lastChange !== null): ?>
+  <details class="mt-3">
+    <summary class="cursor-pointer text-xs font-medium text-accent-700 dark:text-indigo-300">Freeze this report now…</summary>
+    <form method="post" class="mt-2 flex flex-wrap gap-2 items-center" onsubmit="return confirm('Freeze the current live numbers for Term <?= $term ?>? The saved copy can\'t be changed afterwards.')">
+      <?= csrf_field() ?>
+      <input type="hidden" name="action" value="freeze">
+      <input type="text" name="note" maxlength="255" placeholder="Optional note, e.g. Before reading intervention" class="flex-1 min-w-[16rem] text-sm rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-1.5">
+      <button type="submit" class="px-3 py-1.5 rounded-lg text-sm bg-accent-600 hover:bg-accent-700 text-white">Freeze live numbers</button>
+    </form>
+    <p class="mt-1 text-[11px] text-slate-400 dark:text-slate-500">Saves today's live numbers as a new snapshot. Older snapshots are kept. Student names are never saved — counts only.</p>
+  </details>
+  <?php endif; ?>
+</div>
 
 <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100 mb-1">Students Failing 2 or More Subjects</h2>
 <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">Learners with a published grade below 75 in at least two subjects this term. MAPEH counts as one subject.</p>
@@ -340,7 +306,9 @@ render_header('Reporting', 'School-wide reports from published grades · ' . $ye
 <?php endif; ?>
 
 <?php if ($multiFail): ?>
-
+<?php if ($snapshot): ?>
+<p class="text-[11px] text-slate-400 dark:text-slate-500 mb-2">Student lists below are always live — names are never saved in a frozen report — so their counts can differ from the frozen numbers above.</p>
+<?php endif; ?>
 <div class="space-y-3 mb-10">
   <?php foreach ($multiFail as $gl): ?>
   <details class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm">
@@ -447,7 +415,7 @@ render_header('Reporting', 'School-wide reports from published grades · ' . $ye
 
 <!-- Term trend -->
 <h2 class="text-base font-semibold text-slate-800 dark:text-slate-100 mb-1">Term-over-Term Trend</h2>
-<p class="text-xs text-slate-500 dark:text-slate-400 mb-4">Failing-2+ rate per grade level across the three terms, against this year's current enrollment. "—" means no grades are published for that term yet. A falling rate suggests interventions are working.</p>
+<p class="text-xs text-slate-500 dark:text-slate-400 mb-4">Failing-2+ rate per grade level across the three terms. <?= $snapshot ? 'Terms marked 🔒 use their latest frozen report (and that report’s enrollment); the rest are live against current enrollment.' : 'Live numbers against this year’s current enrollment.' ?> "—" means no grades are published for that term yet. A falling rate suggests interventions are working.</p>
 <div class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-sm p-5 mb-10">
   <div class="flex flex-wrap gap-4 mb-4 text-xs text-slate-600 dark:text-slate-300">
     <?php for ($t = 1; $t <= 3; $t++): ?><span class="flex items-center gap-1.5"><span class="inline-block w-3 h-3 rounded-sm <?= $trendShades[$t] ?>"></span>Term <?= $t ?></span><?php endfor; ?>
@@ -458,12 +426,12 @@ render_header('Reporting', 'School-wide reports from published grades · ' . $ye
       <div class="text-sm font-medium text-slate-600 dark:text-slate-300 whitespace-nowrap"><?= h($tr['name']) ?></div>
       <div class="space-y-0.5">
         <?php for ($t = 1; $t <= 3; $t++): $v = $tr['rates'][$t]; ?>
-        <div class="grid grid-cols-[1fr_6.5rem] gap-2 items-center" title="<?= h($tr['name']) ?> · Term <?= $t ?>: <?= $v === null ? 'no published grades yet' : ($tr['fail'][$t] ?? 0) . ' learners (' . $pctLabel($v) . ')' ?>">
+        <div class="grid grid-cols-[1fr_7.5rem] gap-2 items-center" title="<?= h($tr['name']) ?> · Term <?= $t ?><?= $tr['frozen'][$t] ? ' (frozen)' : ' (live)' ?>: <?= $v === null ? 'no published grades yet' : ($tr['fail'][$t] ?? 0) . ' learners (' . $pctLabel($v) . ')' ?>">
           <div class="relative h-3.5">
             <div class="absolute top-0 bottom-0 left-0 border-l border-slate-300 dark:border-slate-600"></div>
             <?php if ($v !== null): ?><div class="absolute left-0 top-0 bottom-0 rounded-r <?= $trendShades[$t] ?>" style="width: <?= min(100, $v / $trendMax * 100) ?>%"></div><?php endif; ?>
           </div>
-          <div class="text-xs tabular-nums text-slate-500 dark:text-slate-400 whitespace-nowrap"><span class="text-slate-400 dark:text-slate-500">T<?= $t ?></span> <span class="font-semibold text-slate-700 dark:text-slate-200"><?= $v === null ? '—' : $pctLabel($v) ?></span><?php
+          <div class="text-xs tabular-nums text-slate-500 dark:text-slate-400 whitespace-nowrap"><span class="text-slate-400 dark:text-slate-500">T<?= $t ?><?= $tr['frozen'][$t] ? ' 🔒' : '' ?></span> <span class="font-semibold text-slate-700 dark:text-slate-200"><?= $v === null ? '—' : $pctLabel($v) ?></span><?php
             if ($t > 1 && $v !== null && $tr['rates'][$t - 1] !== null):
                 $d = round($v - $tr['rates'][$t - 1], 1);
                 if ($d != 0): ?> <span class="<?= $d > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400' ?>"><?= $d > 0 ? '▲' : '▼' ?><?= $pctLabel(abs($d)) ?></span><?php endif;

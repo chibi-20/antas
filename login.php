@@ -7,7 +7,17 @@ if (current_user()) {
     redirect('/index.php');
 }
 
-$redirectTo = $_GET['redirect'] ?? $_POST['redirect'] ?? '/index.php';
+$redirectTo = (string) ($_GET['redirect'] ?? $_POST['redirect'] ?? '/index.php');
+// require_login() passes the full REQUEST_URI, which already includes the app's base path
+// (e.g. /antas/admin/students.php) — redirect() adds that prefix itself, so strip it here or the
+// user lands on /antas/antas/... (404). Anything that isn't a plain in-app path goes home.
+$basePath = rtrim(config()['base_path'], '/');
+if ($basePath !== '' && ($redirectTo === $basePath || str_starts_with($redirectTo, $basePath . '/'))) {
+    $redirectTo = substr($redirectTo, strlen($basePath));
+}
+if (!str_starts_with($redirectTo, '/') || str_starts_with($redirectTo, '//') || str_contains($redirectTo, '\\')) {
+    $redirectTo = '/index.php';
+}
 $error = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
